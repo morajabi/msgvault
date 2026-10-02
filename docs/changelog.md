@@ -20,6 +20,10 @@ All notable changes to msgvault, grouped by release.
 - Adding Calendar to a Gmail token recognizes Google's short and expanded
   `email`/`profile` scope names, avoiding false missing-scope errors on re-consent.
 
+- **Transcripts beside recordings:** the Web reader shows each recording's
+  Docbank transcript, or why there isn't one, under the expanded message.
+  `GET /api/v1/messages/{id}/recordings` serves the same list (API schema 3.2.0).
+
 ## 0.21.0
 <small>2026-10-02</small>
 
