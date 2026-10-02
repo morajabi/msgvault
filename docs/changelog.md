@@ -8,6 +8,12 @@ All notable changes to msgvault, grouped by release.
 
 ## Unreleased
 
+- msgvault sends anonymous usage telemetry: a daemon ping at startup and every
+  24 hours, and an `app_opened` event the web UI reports through the daemon once
+  per UTC day. Events carry the version, commit, OS, architecture and a random
+  install ID, never archive content. `MSGVAULT_TELEMETRY_ENABLED=0` turns it
+  off. See [telemetry](configuration.md#telemetry).
+
 - Rerunning `import-whatsapp` on an Apple `ChatStorage.sqlite` writes only new
   and changed messages instead of rewriting the whole archive, and picks up
   edits and senders that `LID.sqlite` resolves later.

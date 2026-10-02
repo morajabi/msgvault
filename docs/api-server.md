@@ -104,6 +104,10 @@ it is separate from the binary release version. The current schema is **3.1.0**.
 Upgrade clients and daemon together across incompatible schema versions,
 including remote deployments.
 
+Schema 3.1.0 adds `POST /api/v1/telemetry/events`, which the web UI uses to
+report anonymous usage events through the daemon. See
+[Telemetry](configuration.md#telemetry).
+
 Schema 3.0.0 removes the unguarded
 `POST /api/v1/identity/match-candidates/{id}/accept` and `/reject` routes.
 Use the corresponding `/review/accept` and `/review/reject` routes with a fresh
