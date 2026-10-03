@@ -770,7 +770,7 @@ func TestBeeperMediaCandidateAttachmentStates(t *testing.T) {
 	}
 	assert.Empty(want)
 
-	// The missing one still shows on its message as a recording never captured.
+	// Audio with no state and no archived bytes shows as a recording never captured.
 	occurrences, err := f.Store.ListMessageMediaOccurrences(t.Context(), "discovery", legacyMissing.messageID)
 	require.NoError(err)
 	require.Len(occurrences, 1)
