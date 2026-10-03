@@ -1121,6 +1121,14 @@ all_sources_upload_consent = true # allow audio from every captured source to le
 | `api_key_file` | — | Owner-only Docbank key file, read for each request; takes priority over `api_key_env` |
 | `all_sources_upload_consent` | `false` | Allow stored audio and explicit source transcripts from every captured source, including future providers, to be sent to `url`. Without it the job only records local state |
 | `asr_profile` | — | Optional Docbank processing profile for stored audio without usable source text. An empty value retains audio without requesting processing. Msgvault rejects `supplied-transcript`, which Docbank reserves for supplied transcript input. |
+| `reference_consent` | `false` | Send recording links from every message source to `url` as references. This consent is separate from audio upload consent. |
+| `reference_origins` | `[]` | Exact origins for self-hosted Cap, such as `https://cap.example.test`. Include only scheme, host and optional port. Register each origin in Docbank too. |
+
+With `enabled = true` and `reference_consent = true`, the daemon routes Loom,
+Cap and Teams recording links in the background, including existing messages.
+It submits references with acquisition disabled. Docbank reports link-only,
+`unsupported` or `access_required` coverage. Delivery log events include Docbank's
+`source_id` and `occurrence_id` for `docbank media import-artifact`.
 
 The former Beeper-only `upload_consent` setting no longer enables uploads.
 Existing users must explicitly set `all_sources_upload_consent = true` to resume
