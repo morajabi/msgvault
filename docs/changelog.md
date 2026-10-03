@@ -19,7 +19,7 @@ All notable changes to msgvault, grouped by release.
   and archives successful changes immediately.
 - Adding Calendar to a Gmail token recognizes Google's short and expanded
   `email`/`profile` scope names, avoiding false missing-scope errors on re-consent.
-- Route Loom, Cap and Teams recording links to Docbank in the background with separate reference consent, including existing messages. Self-hosted Cap requires an exact configured origin.
+- Route Loom/Cap links and native Teams recording pointers to Docbank in the background with separate reference consent, including existing messages. Self-hosted Cap requires an exact configured origin.
 
 ## 0.21.0
 <small>2026-10-02</small>
