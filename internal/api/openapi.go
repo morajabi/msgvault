@@ -342,6 +342,7 @@ import (
 // CLI clients can authorize Microsoft Graph mail before starting the worker.
 // 3.0.0 replaces unguarded identity decisions with review-token routes and adds consented identity scoring.
 // 3.1.0 adds opt-in calendar event control and availability queries.
+// 3.1.0 adds the account: and received: search operators.
 const APISchemaVersion = "3.1.0"
 
 // OpenAPIDocument builds the API schema from the same Huma route registration
