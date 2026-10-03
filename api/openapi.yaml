@@ -2247,6 +2247,10 @@ components:
           type: integer
         type:
           type: string
+        virtual_accounts:
+          items:
+            $ref: "#/components/schemas/VirtualAccount"
+          type: array
       required:
         - id
         - email
@@ -4619,6 +4623,7 @@ components:
             - before
             - deletion
             - identity
+            - account
           type: string
         values:
           items:
@@ -12326,6 +12331,7 @@ components:
             - participant
             - domain
             - mailing_list
+            - account
             - message_type
             - after
             - before
@@ -14378,6 +14384,33 @@ components:
       required:
         - status
       type: object
+    VirtualAccount:
+      additionalProperties: true
+      properties:
+        account_address:
+          type: string
+        key:
+          type: string
+        message_count:
+          format: int64
+          type: integer
+        pending_count:
+          format: int64
+          type: integer
+        source_deleted_count:
+          format: int64
+          type: integer
+        source_id:
+          format: int64
+          type: integer
+        unattributed:
+          type: boolean
+      required:
+        - key
+        - source_id
+        - message_count
+        - source_deleted_count
+      type: object
     VisualBuildRequest:
       additionalProperties: false
       properties:
@@ -14700,6 +14733,23 @@ paths:
           name: view_type
           schema:
             type: string
+        - description: Exact attributed account addresses; repeated values are alternatives
+          in: query
+          name: account_addresses
+          schema:
+            items:
+              type: string
+            type: array
+        - description: Include messages no confirmed account claims
+          in: query
+          name: account_unattributed
+          schema:
+            type: boolean
+        - description: JSON list of account scopes that intersect, for structured clients
+          in: query
+          name: account_scopes
+          schema:
+            type: string
         - description: "Sort field: count, size, attachment_size, or name"
           in: query
           name: sort
@@ -14786,6 +14836,23 @@ paths:
           in: query
           name: view_type
           required: true
+          schema:
+            type: string
+        - description: Exact attributed account addresses; repeated values are alternatives
+          in: query
+          name: account_addresses
+          schema:
+            items:
+              type: string
+            type: array
+        - description: Include messages no confirmed account claims
+          in: query
+          name: account_unattributed
+          schema:
+            type: boolean
+        - description: JSON list of account scopes that intersect, for structured clients
+          in: query
+          name: account_scopes
           schema:
             type: string
         - description: "Sort field: count, size, attachment_size, or name"
@@ -21247,6 +21314,23 @@ paths:
     get:
       operationId: filterMessages
       parameters:
+        - description: Exact attributed account addresses; repeated values are alternatives
+          in: query
+          name: account_addresses
+          schema:
+            items:
+              type: string
+            type: array
+        - description: Include messages no confirmed account claims
+          in: query
+          name: account_unattributed
+          schema:
+            type: boolean
+        - description: JSON list of account scopes that intersect, for structured clients
+          in: query
+          name: account_scopes
+          schema:
+            type: string
         - description: Sender email/address filter
           in: query
           name: sender
@@ -21386,6 +21470,23 @@ paths:
     get:
       operationId: getGmailIDsByFilter
       parameters:
+        - description: Exact attributed account addresses; repeated values are alternatives
+          in: query
+          name: account_addresses
+          schema:
+            items:
+              type: string
+            type: array
+        - description: Include messages no confirmed account claims
+          in: query
+          name: account_unattributed
+          schema:
+            type: boolean
+        - description: JSON list of account scopes that intersect, for structured clients
+          in: query
+          name: account_scopes
+          schema:
+            type: string
         - description: Sender email/address filter
           in: query
           name: sender
@@ -27481,6 +27582,23 @@ paths:
           name: list_id
           schema:
             type: string
+        - description: Exact attributed account addresses (vector or hybrid mode only)
+          in: query
+          name: account_addresses
+          schema:
+            items:
+              type: string
+            type: array
+        - description: Include messages no confirmed account claims (vector or hybrid mode only)
+          in: query
+          name: account_unattributed
+          schema:
+            type: boolean
+        - description: JSON list of account scopes that intersect (vector or hybrid mode only)
+          in: query
+          name: account_scopes
+          schema:
+            type: string
         - description: Calendar period in YYYY, YYYY-MM, or YYYY-MM-DD format (vector or hybrid mode only)
           in: query
           name: time_period
@@ -27678,6 +27796,23 @@ paths:
         - description: "Exact search scope: body; omit for composite full-text search"
           in: query
           name: scope
+          schema:
+            type: string
+        - description: Exact attributed account addresses; repeated values are alternatives
+          in: query
+          name: account_addresses
+          schema:
+            items:
+              type: string
+            type: array
+        - description: Include messages no confirmed account claims
+          in: query
+          name: account_unattributed
+          schema:
+            type: boolean
+        - description: JSON list of account scopes that intersect, for structured clients
+          in: query
+          name: account_scopes
           schema:
             type: string
         - description: Sender email/address filter; not supported when scope=body
@@ -27880,6 +28015,23 @@ paths:
           name: view_type
           schema:
             type: string
+        - description: Exact attributed account addresses; repeated values are alternatives
+          in: query
+          name: account_addresses
+          schema:
+            items:
+              type: string
+            type: array
+        - description: Include messages no confirmed account claims
+          in: query
+          name: account_unattributed
+          schema:
+            type: boolean
+        - description: JSON list of account scopes that intersect, for structured clients
+          in: query
+          name: account_scopes
+          schema:
+            type: string
         - description: Sender email/address filter
           in: query
           name: sender
@@ -28035,6 +28187,11 @@ paths:
         - description: Account email or configured source identifier
           in: query
           name: account
+          schema:
+            type: string
+        - description: JSON list of account scopes that intersect, for structured clients
+          in: query
+          name: account_scopes
           schema:
             type: string
         - description: Message type filter
@@ -29572,6 +29729,23 @@ paths:
         - description: Aggregate view type for grouping
           in: query
           name: group_by
+          schema:
+            type: string
+        - description: Exact attributed account addresses; repeated values are alternatives
+          in: query
+          name: account_addresses
+          schema:
+            items:
+              type: string
+            type: array
+        - description: Include messages no confirmed account claims
+          in: query
+          name: account_unattributed
+          schema:
+            type: boolean
+        - description: JSON list of account scopes that intersect, for structured clients
+          in: query
+          name: account_scopes
           schema:
             type: string
         - description: Sender email/address filter

@@ -13,6 +13,10 @@ All notable changes to msgvault, grouped by release.
   `account:work@example.org` adds sent mail and calendar events. Older mail
   fills in on each source's next sync or with `msgvault repair-derived`. API
   schema 3.2.0; older daemons refuse these operators.
+- Pick a receiving address or the unattributed mail of a source in the TUI
+  account picker, the Web UI's Explore account filter, and the MCP `account`
+  argument; vector and hybrid search accept `received:` and `account:`. API
+  schema 3.2.0.
 
 - Rerunning `import-whatsapp` on an Apple `ChatStorage.sqlite` writes only new
   and changed messages instead of rewriting the whole archive, and picks up
