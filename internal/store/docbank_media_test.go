@@ -769,6 +769,16 @@ func TestBeeperMediaCandidateAttachmentStates(t *testing.T) {
 		delete(want, candidate.AttachmentID)
 	}
 	assert.Empty(want)
+
+	// The missing one still shows on its message as a recording never captured.
+	occurrences, err := f.Store.ListMessageMediaOccurrences(t.Context(), "discovery", legacyMissing.messageID)
+	require.NoError(err)
+	require.Len(occurrences, 1)
+	assert.Equal(legacyMissing.attachmentID, occurrences[0].AttachmentID)
+	assert.Empty(occurrences[0].OccurrenceRef)
+	occurrences, err = f.Store.ListMessageMediaOccurrences(t.Context(), "discovery", legacyStored.messageID)
+	require.NoError(err)
+	assert.Empty(occurrences)
 }
 
 func TestBeeperMediaSchemaReopen(t *testing.T) {

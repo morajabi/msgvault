@@ -53,12 +53,16 @@ const (
 	beeperMediaPollDelay         = time.Minute
 )
 
+// attachmentBytesArchived matches attachment a when its bytes are in the archive.
+// Rows written before attachment_state existed count as stored only when it holds.
+const attachmentBytesArchived = `(length(COALESCE(a.content_hash, '')) = 64
+	  AND COALESCE(a.size, 0) > 0
+	  AND COALESCE(a.storage_path, '') <> '')`
+
 // beeperMediaEligible is the shared provider, capture and role predicate. It
 // assumes a (attachments), m (messages), c (conversations) and src (sources).
 // Archives older than attachment_state leave it NULL on stored Beeper audio.
-const beeperMediaEligible = `length(COALESCE(a.content_hash, '')) = 64
-	  AND COALESCE(a.size, 0) > 0
-	  AND COALESCE(a.storage_path, '') <> ''
+const beeperMediaEligible = attachmentBytesArchived + `
 	  AND COALESCE(src.source_type, '') <> ''
 	  AND COALESCE(src.identifier, '') <> ''
 	  AND COALESCE(m.source_message_id, '') <> ''
@@ -651,7 +655,8 @@ func (s *Store) ListMessageMediaOccurrences(
 		JOIN messages m ON m.id = a.message_id
 		WHERE m.id = ? AND `+LiveMessagesWhere("m", true)+`
 		  AND COALESCE(a.media_type, '') IN ('audio', 'voice_note')
-		  AND COALESCE(a.attachment_state, '') IN ('pending', 'skipped', 'failed', 'unavailable')
+		  AND (COALESCE(a.attachment_state, '') IN ('pending', 'skipped', 'failed', 'unavailable')
+		    OR (COALESCE(a.attachment_state, '') = '' AND NOT `+attachmentBytesArchived+`))
 		ORDER BY a.id`), messageID)
 	if err != nil {
 		return nil, fmt.Errorf("list uncaptured message audio: %w", err)
