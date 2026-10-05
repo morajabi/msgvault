@@ -38,7 +38,7 @@ func TestAccountOperatorsRequireCapableDaemon(t *testing.T) {
 		},
 	}
 	for name, call := range calls {
-		for _, version := range []string{"3.0.0", "3.1.0"} {
+		for _, version := range []string{"3.1.0", "3.2.0"} {
 			t.Run(name+"/"+version, func(t *testing.T) {
 				assert := assert.New(t)
 				var forwarded atomic.Int32
@@ -52,9 +52,9 @@ func TestAccountOperatorsRequireCapableDaemon(t *testing.T) {
 				}))
 				defer server.Close()
 				err := call(t.Context(), newTestStore(server, ""))
-				if version == "3.0.0" {
+				if version == "3.1.0" {
 					require.Error(t, err)
-					assert.Contains(err.Error(), "account: and received: filters require daemon API schema 3.1.0")
+					assert.Contains(err.Error(), "account: and received: filters require daemon API schema 3.2.0")
 					assert.Zero(forwarded.Load(), "no non-health request may reach an older daemon")
 					return
 				}

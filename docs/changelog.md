@@ -12,7 +12,7 @@ All notable changes to msgvault, grouped by release.
   forwarded and Bcc'd mail delivered to a confirmed alias, and
   `account:work@example.org` adds sent mail and calendar events. Older mail
   fills in on each source's next sync or with `msgvault repair-derived`. API
-  schema 3.1.0; older daemons refuse these operators.
+  schema 3.2.0; older daemons refuse these operators.
 
 - Rerunning `import-whatsapp` on an Apple `ChatStorage.sqlite` writes only new
   and changed messages instead of rewriting the whole archive, and picks up

@@ -33,7 +33,7 @@ const (
 
 	// accountAttributionMinAPISchemaVersion is the first daemon contract that
 	// understands account: and received:; older daemons read them as text.
-	accountAttributionMinAPISchemaVersion = "3.1.0"
+	accountAttributionMinAPISchemaVersion = "3.2.0"
 )
 
 // Engine implements query.Engine by making HTTP calls to a msgvault daemon.
