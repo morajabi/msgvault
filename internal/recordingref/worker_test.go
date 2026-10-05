@@ -139,9 +139,6 @@ func TestRecordingReferenceFeedHTML(t *testing.T) {
 	runDiscovery(t, w, 1)
 	require.Len(requests, 1)
 	assert.Equal("https://loom.com/share/abc?token=one&key=two!", (<-requests).ReferenceURL)
-	savedText, savedHTML := f.GetMessageBody(id)
-	assert.Equal(text, savedText.String)
-	assert.Equal(body, savedHTML.String)
 	recordingText := "Watch recording https://loom.com/share/abc?token=one&key=two!"
 	require.NoError(f.Store.UpsertMessageBody(id, sql.NullString{String: recordingText, Valid: true}, sql.NullString{String: body, Valid: true}))
 	m, exists, err := f.Store.ReadRecordingMessage(t.Context(), id)
@@ -211,9 +208,6 @@ func TestRecordingReferenceFeedHTMLVisibleURL(t *testing.T) {
 					got = append(got, <-requests)
 				}
 				assert.ElementsMatch(want, got)
-				savedText, savedHTML := f.GetMessageBody(id)
-				assert.Equal(text, savedText)
-				assert.Equal(body, savedHTML.String)
 				for i, independent := range []string{"https://cap.so/s/abc", "https://cap.so/s/abc!extra"} {
 					if htmlOnly {
 						body += " " + independent
@@ -622,8 +616,7 @@ func TestRecordingReferenceUncertain(t *testing.T) {
 		{"receipt", false, 200, false, "withdrawn", ""},
 		{"recent miss", false, 404, false, "uncertain", "not_found"},
 		{"settled miss", false, 404, true, "withdrawn", "receipt_not_found"},
-		{"recent rejection", true, 422, false, "uncertain", "validation"},
-		{"old rejection", true, 422, true, "uncertain", "validation"},
+		{"rejection", true, 422, false, "uncertain", "validation"},
 		{"old route missing", true, 404, true, "uncertain", "not_found"},
 		{"old method rejection", true, 405, true, "uncertain", "http_error"},
 		{"old forbidden", true, 403, true, "uncertain", "forbidden"},

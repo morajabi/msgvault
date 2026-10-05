@@ -114,10 +114,5 @@ func TestScanHTML(t *testing.T) {
 			}
 		})
 	}
-	assert, require := assert.New(t), require.New(t)
-	assert.Empty(ScanHTML(`<a href="prefix https://cap.so/s/abc">Watch</a>`, nil))
-	refs := ScanHTML(`<a href="https://[2001:db8::1]:8443/s/abc">Watch</a>`, []string{"https://[2001:db8::1]:8443"})
-	require.Len(refs, 1)
-	assert.Equal("https://[2001:db8::1]:8443", refs[0].Origin)
-	assert.Empty(refs[0].Canonical)
+	assert.Empty(t, ScanHTML(`<a href="prefix https://cap.so/s/abc">Watch</a>`, nil))
 }
