@@ -1070,7 +1070,7 @@ func removePersonProviderWithDaemon(ctx context.Context, name, ifMatch string) e
 	if err := probeLocalDaemonAuth(ctx, runtime, currentCfg); err != nil {
 		return err
 	}
-	client, err := localDaemonAPIClient(urlFromDaemonRuntime(runtime), currentCfg.Server.APIKey)
+	client, err := localDaemonAPIClient(urlFromDaemonRuntime(runtime), currentCfg.Server.AuthenticationKey())
 	if err != nil {
 		return err
 	}

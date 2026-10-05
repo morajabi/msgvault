@@ -25,12 +25,12 @@ import (
 	"go.kenn.io/msgvault/internal/config"
 	"go.kenn.io/msgvault/internal/deletion"
 	"go.kenn.io/msgvault/internal/discord"
+	"go.kenn.io/msgvault/internal/gcal"
 	"go.kenn.io/msgvault/internal/gmail"
 	"go.kenn.io/msgvault/internal/granola"
 	imaplib "go.kenn.io/msgvault/internal/imap"
 	"go.kenn.io/msgvault/internal/jobctx"
 	"go.kenn.io/msgvault/internal/meetingimport"
-	"go.kenn.io/msgvault/internal/microsoft"
 	"go.kenn.io/msgvault/internal/muesli"
 	"go.kenn.io/msgvault/internal/notionmeetings"
 	"go.kenn.io/msgvault/internal/oauth"
@@ -176,6 +176,7 @@ type serveRuntimeOperationGate interface {
 }
 
 func init() {
+	addServeConfigFlags(serveCmd)
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(daemonCmd)
 	addServeLifecycleCommands(serveCmd)
@@ -188,12 +189,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 	cfg := state.cfg
 	logger := state.logger
-	// Validate security posture before doing any work
-	if err := cfg.Server.ValidateSecure(); err != nil {
+	// Resolve the interface before reserving a listener. Credential creation
+	// waits until this process owns the daemon lock.
+	if _, err := cfg.ResolveServerBindAddress(); err != nil {
 		return err
-	}
-	if cfg.Server.APIKey != "" && len(cfg.Server.APIKey) < 16 {
-		logger.Warn("api_key is very short — use a randomly generated key of at least 32 characters")
 	}
 
 	// Missing provider credentials should not prevent the daemon from serving
@@ -217,6 +216,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	logger.Info("Server listener bound", "address", apiListener.Addr().String(), "bind_source", cfg.BindAddressSource())
 	listenerReserved := true
 	defer func() {
 		if listenerReserved {
@@ -235,6 +235,12 @@ func runServe(cmd *cobra.Command, args []string) error {
 	ownership, err := claimServeOwnership(cmd.Context(), cfg, bindAddr, boundPort, Version)
 	if err != nil {
 		return fmt.Errorf("claim daemon ownership: %w", err)
+	}
+	if !cfg.Server.HasCredentialSource() && !cfg.Server.AllowInsecure && cfg.Server.AuthenticationKey() != "" {
+		logger.Info("Server API credential is persisted", "path", cfg.ServerKeyFilePath())
+	}
+	if cfg.Server.AuthenticationKey() != "" && len(cfg.Server.AuthenticationKey()) < 16 {
+		logger.Warn("api_key is very short — use a randomly generated key of at least 32 characters")
 	}
 	heartbeatCtx, stopHeartbeat := context.WithCancel(cmd.Context())
 	heartbeatDone := make(chan struct{})
@@ -1061,6 +1067,11 @@ func applyServerRuntimeConfig(options *api.ServerOptions, cfg *config.Config) {
 }
 
 func listenServeAPI(bindAddr string, port int) (net.Listener, error) {
+	resolved, err := resolveServeBind(bindAddr)
+	if err != nil {
+		return nil, err
+	}
+	bindAddr = resolved
 	if bindAddr == "" {
 		bindAddr = defaultDaemonBindAddr
 	}
@@ -1588,6 +1599,7 @@ type storeAPIAdapter struct {
 	gmailDraftPolicy        []config.GmailDraftSource
 	beeperDraftPolicy       []config.GmailDraftSource
 	gmailDraftClientFactory func(context.Context, *store.Source) (gmail.DraftAPI, error)
+	calendarClientFactory   func(context.Context, config.GCalSource, bool) (gcal.ControlAPI, error)
 	// draftCacheRefresh rebuilds the analytics cache after a draft is durable,
 	// the same best-effort hook the meeting importer uses.
 	draftCacheRefresh     func(context.Context, string) error
@@ -4258,16 +4270,10 @@ func runScheduledTeamsSync(ctx context.Context, src *store.Source, s *store.Stor
 		return fmt.Errorf("post-source-create migrations: %w", err)
 	}
 
-	mgr := microsoft.NewGraphManager(cfg.Microsoft.ClientID, cfg.Microsoft.EffectiveTenantID(), cfg.Microsoft.EffectiveRedirectURI(), cfg.TokensDir(), logger)
-	tokenFn, err := mgr.TokenSource(ctx, email)
+	client, err := newTeamsClient(ctx, cfg, logger, email)
 	if err != nil {
 		return err
 	}
-	qps := float64(cfg.Sync.RateLimitQPS)
-	if qps <= 0 {
-		qps = 5
-	}
-	client := teams.NewClient("https://graph.microsoft.com/v1.0", tokenFn, qps)
 	opts := scheduledTeamsImportOptions(email, cfg)
 	_, err = teams.NewImporter(s, client).Import(ctx, opts)
 	return err

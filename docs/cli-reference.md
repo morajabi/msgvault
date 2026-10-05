@@ -1,5 +1,5 @@
 ---
-last_edited: "2026-10-02"
+last_edited: "2026-10-05"
 title: CLI Reference
 description: Complete command reference for all msgvault commands.
 ---
@@ -20,7 +20,7 @@ in your installed binary. This reference follows current `main`; see
 | Review and remove mail | [stage-delete](#stage-delete), [delete-staged](#delete-staged), [deduplicate](#deduplicate), [gc](#gc) |
 | Back up and manage attachment storage | [backup](#backup), [pack-attachments](#pack-attachments), [purge-excluded-media](#purge-excluded-media) |
 | Repair older records | [repair-identity](#repair-identity), [repair-senders](#repair-senders), [repair-message](#repair-message), [repair-derived](#repair-derived), [repair-labels](#repair-labels), [repair-list-ids](#repair-list-ids), [repair-dates](#repair-dates) |
-| Operate or integrate | [setup](#setup), [daemon](#daemon), [serve](#serve), [activity](#activity), [mcp](#mcp), [query](#query), [openapi](#openapi), [agent-token](#agent-token) |
+| Operate or integrate | [setup](#setup), [credentials](#credentials), [daemon](#daemon), [serve](#serve), [activity](#activity), [mcp](#mcp), [query](#query), [openapi](#openapi), [agent-token](#agent-token) |
 
 ## meetings
 
@@ -1162,10 +1162,10 @@ msgvault backfill-beeper-media --account signal
 
 Register a [Slack workspace](/docs/usage/slack/) as a `slack` source. Requires a
 user token (`xoxp-…`) from an internal Slack app you create (see the usage
-guide for the two-minute setup and scope list). The token is validated with
-`auth.test` plus a `search.messages` probe (thread-reply archiving needs the
-`search:read` scope, so an under-scoped token fails here rather than on
-every future sync) and stored at `tokens/slack_<team-id>_<user-id>.json`.
+guide for setup and scope choices). The token is validated with `auth.test`
+and stored at `tokens/slack_<team-id>_<user-id>.json`. Public-channel-only
+tokens need no search, file, or reaction permissions; sync revisits history
+for thread replies when `search:read` is absent.
 
 ```bash
 msgvault add-slack
@@ -1207,20 +1207,22 @@ msgvault import-slackdump --me U0123456789 --limit 100 /path/to/export.zip
 
 ## sync-slack
 
-Sync Slack conversations — channels you are a member of, group DMs, and 1:1
-DMs — for registered workspaces. The first run backfills full history and is
+Sync Slack conversations for registered workspaces. Public-channel-only tokens
+can archive all public channels, including unjoined ones. Broader tokens archive
+your channel memberships, group DMs, and 1:1 DMs. The first run backfills full history and is
 resumable; later runs are incremental and sweep for thread replies created
 since the last run (any thread age). Per-workspace failures do not stop the run: remaining workspaces
 still sync and the command exits non-zero listing the failures. The `[slack]`
 config `channels`/`exclude_channels` filters select which channels sync. The
-`dms`/`group_dms` settings select whether DMs and group DMs sync. See
+`private_channels`, `dms`, and `group_dms` settings independently select whether
+private channels, DMs, and group DMs sync. See
 [Slack](/docs/usage/slack/).
 
 ```bash
 msgvault sync-slack
 msgvault sync-slack T0123456789
 msgvault sync-slack --full
-msgvault sync-slack --dms=false --group-dms=false
+msgvault sync-slack --private-channels=false --dms=false --group-dms=false
 ```
 
 | Flag | Default | Description |
@@ -1229,6 +1231,7 @@ msgvault sync-slack --dms=false --group-dms=false
 | `--dms` | configured | Include one-to-one DMs for this run (`true` or `false`) |
 | `--full` | `false` | Start (or continue) a repair session: re-fetch every message, upserting in place (catches old thread replies and edits). Interrupted or --limit-scoped repairs resume across later runs of any kind until complete |
 | `--group-dms` | configured | Include group DMs for this run (`true` or `false`) |
+| `--private-channels` | configured | Include private channels for this run (`true` or `false`) |
 | `--no-threads` | `false` | Skip thread-reply fetching for this run (a later threaded run pays the debt automatically) |
 | `--maintenance` | `false` | Repair edits/reaction changes on recent messages (ignored by default after capture) |
 | `--no-media` | `false` | Skip file downloads for this run (files become pending markers; `backfill-slack-media` fetches them later) |
@@ -1259,6 +1262,7 @@ msgvault add-calendar <email> [flags]
 
 | Flag | Description |
 |---|---|
+| `--write` | Also request `calendar.events`, preserving existing Google scopes; source write permissions remain required |
 | `--oauth-app` | Named OAuth app to use |
 | `--headless` | Print token-copy instructions for a headless host instead of opening a browser |
 | `--all-calendars` | Include reader/freeBusyReader (subscribed, holiday) calendars |
@@ -1285,6 +1289,49 @@ msgvault sync-calendar <name|email> [flags]
 | `--min-access-role` | Minimum access role: `owner`, `writer`, or `reader` |
 | `--oauth-app` | Named OAuth app to use |
 | `--noresume` | Do not resume an interrupted full sync |
+
+---
+
+## calendar
+
+Control live Google Calendar events through the daemon. This is unreleased
+functionality. Follow [Calendar event setup](usage/calendar.md#control-events-unreleased)
+for consent and source permissions.
+
+```bash
+msgvault calendar create <calendar-id> --account <name|email> --summary <title> --from <start> --to <end>
+msgvault calendar update <calendar-id> <event-id> --account <name|email> [field flags]
+msgvault calendar delete <calendar-id> <event-id> --account <name|email>
+msgvault calendar move <calendar-id> <event-id> <destination-calendar-id> --account <name|email>
+msgvault calendar respond <calendar-id> <event-id> --account <name|email> --status accepted
+msgvault calendar freebusy <calendar-id> --account <name|email> --from <start> --to <end>
+msgvault calendar conflicts <calendar-id> --account <name|email> --from <start> --to <end> --calendars <ids>
+```
+
+| Flag | Applies to | Contract |
+|---|---|---|
+| `--account` | All | Required OAuth account or configured source name, separate from the target calendar |
+| `--dry-run` | All | Verify live access and return the proposed writes without applying them; availability still reads Google |
+| `--read-only` | All | Reject all mutations |
+| `--json` | All | Print complete results and archive receipts; dry runs and availability always print JSON |
+| `--send-updates` | Writes | `none` (default), `all`, or `externalOnly` |
+| `--summary`, `--description`, `--location` | Create/update | Omitted update fields are preserved; explicit empty clears |
+| `--from`, `--to` | Create/update/availability | RFC3339 with offset, or local `YYYY-MM-DDTHH:MM` with `--tz` |
+| `--tz` | Create/update/availability | IANA time zone; event edits require a time bound |
+| `--all-day` | Create/update | Date-only `YYYY-MM-DD`; end is exclusive |
+| `--attendees` | Create/update | Replace comma-separated guest list; explicit empty clears |
+| `--add-attendee` | Update | Add guest emails while preserving existing guests and RSVP state; cannot combine with `--attendees` |
+| `--rrule` | Create/update | Repeatable RRULE; explicit empty clears recurrence |
+| `--reminder` | Create/update | Repeatable `popup:minutes` or `email:minutes` (0–40320, at most five); `default` or `none` cannot combine with overrides |
+| `--scope` | Update/delete/respond | `single` (default), `all`, or `future`; future supports update/delete only |
+| `--original-start` | Update/delete/respond | Original occurrence start, RFC3339 or all-day date; required for single on a series ID and future edits |
+| `--destination` | Move | Required calendar ID or configured alias; standalone events only |
+| `--status` | Respond | Required self RSVP: `accepted`, `declined`, or `tentative` |
+| `--calendars` | Availability | Selected IDs or aliases; default is the positional calendar; at most 50 |
+
+Commands return completed Google writes with archive message IDs. A partial
+remote failure or an archive failure exits with an error after printing the
+receipts. Reconcile the reported event; do not repeat a completed mutation.
 
 ---
 
@@ -3167,7 +3214,6 @@ msgvault eval \
 | `--rerank-jev <shapes>` | disabled | Opt in to `per-candidate`, `batched`, or both Jev shapes |
 | `--rerank-top <count>` | `30` | Between 2 and 30 candidates; cannot exceed `--limit` |
 | `--rerank-max-requests <count>` | `1000` | Maximum provider requests for the whole invocation |
-| `--rerank-cost-stop-usd <amount>` | required when enabled | Local per-run stop based on returned token usage |
 | `--rerank-input-usd-per-million <amount>` | required when enabled | Input price supplied for this run |
 | `--rerank-output-usd-per-million <amount>` | required when enabled | Output price supplied for this run |
 
@@ -3187,25 +3233,26 @@ judgments remain available for the baseline run.
 
 The command prepares candidate text with the same body selection and cleanup
 used for embeddings. It sends only the query and the cleaned subject/body.
-Candidate text is capped at 2048 UTF-8 bytes, query text at 4096 bytes, each
-request at 128 KiB, and each response at 64 KiB. Per-candidate requests use at
-most eight concurrent calls. Each HTTP call has a 10-second deadline, including
-reading the response. A ranking can take longer when requests run in several
-waves; its full elapsed time contributes to the reported latency. The
-`per-candidate` and `batched` shapes use the same retrieved messages in one
-invocation.
+Candidate text is capped at 2048 UTF-8 bytes and query text at 4096 bytes.
+Msgvault calls TypeSafe through Docbank's `document/typesafe` client, which
+sets the request and response size limits and runs at most eight calls at
+once. Msgvault gives each ranking 40 seconds for all of its calls, enough for
+four waves of 10-second calls at 30 candidates. A ranking's full elapsed time
+contributes to the reported latency. The `per-candidate` and `batched` shapes
+use the same retrieved messages in one invocation.
 
-The local cost stop uses the input and output prices supplied on the command
-line. It stops new calls after returned usage reaches the threshold. Calls
-already in flight can finish afterward, so this value is a run stop rather than
-a billing ceiling. Before a live study, verify an account or order limit that
-TypeSafe enforces by rejecting charges above the cap. A displayed balance or
-alert does not establish that behavior. Missing token usage makes cost unknown
-and stops later calls. The report keeps observed input and output token
-subtotals, which may be zero. `usage_complete=false` marks them as partial.
-Unknown cost prints `unknown` in the table and `null` in JSON. Provider
-failures stop further provider calls because failed requests may have unreported
-usage. They leave the baseline in the report and return a nonzero command result.
+Cost is the returned input and output tokens times the prices supplied on the
+command line. Before opening the archive, the command refuses a run whose
+worst-case request count, judged topics times modes times requests per
+ranking, exceeds `--rerank-max-requests`. Msgvault has no local spend limit,
+so before a live study, verify an account or order limit that TypeSafe
+enforces by rejecting charges above the cap. A displayed balance or alert does
+not establish that behavior. A response without token usage fails that arm.
+The first provider failure ends reranking for the run. The report keeps the
+baseline and the token subtotals observed before the failure,
+`usage_complete=false` marks them as partial, and unknown cost prints `unknown`
+in the table and `null` in JSON. Requests and tokens count completed rankings
+only. The command returns a nonzero result.
 
 Example with placeholder prices:
 
@@ -3213,7 +3260,6 @@ Example with placeholder prices:
 TYPESAFE_API_KEY=replace-me msgvault eval \
   --topics topics.tsv --qrels qrels.txt --modes fts,vector,hybrid \
   --limit 100 --rerank-jev per-candidate,batched --rerank-top 30 \
-  --rerank-cost-stop-usd 2 \
   --rerank-input-usd-per-million 1 \
   --rerank-output-usd-per-million 2
 ```
@@ -3268,6 +3314,25 @@ See [SQL Queries](/docs/usage/querying/) for available views and example queries
 
 ---
 
+## credentials
+
+On unreleased `main`, manage provider keys on the daemon host without the Web UI:
+
+```sh
+msgvault credentials set <id> --from-file PATH [--endpoint URL]
+msgvault credentials set <id> --stdin [--endpoint URL]
+msgvault credentials list [--json]
+msgvault credentials import-env
+```
+
+Supply exactly one input source. Supported IDs are `vector.embeddings`,
+`vector.multimodal`, `people.enrichment/<name>`, and
+`people.enrichment/suppression`. The configured provider supplies the default
+endpoint. Suppression keys have no endpoint. Listing prints IDs and bound
+origins, never key values. Import copies present configured environment keys
+and preserves stored keys. See [stored credentials](configuration.md#stored-provider-credentials)
+for input security, runtime precedence, and sweep-provider commands.
+
 ## mcp
 
 ### Discover running HTTP listeners
@@ -3295,9 +3360,12 @@ msgvault mcp [flags]
 |---|---|---|
 | `--force-sql` | `false` | Deprecated in 0.17.0; use `[analytics].engine = "sql"` in `config.toml` instead. See [Configuration: analytics](/docs/configuration/#analytics). |
 | `--no-sqlite-scanner` | `false` | Deprecated in 0.17.0; cache engine selection is daemon-managed. Use `[analytics].engine = "sql"` for live SQL. |
-| `--http` | — | Serve MCP over StreamableHTTP on this address instead of stdio. Bare ports bind to loopback, e.g. `8080` becomes `127.0.0.1:8080`. Non-loopback addresses require `[server].api_key` or `--http-allow-insecure`. |
-| `--http-allow-insecure` | `false` | Allow non-loopback HTTP binding without `[server].api_key`. A configured key is still enforced; without one, use only behind a trusted network boundary or authenticated reverse proxy. |
-| `--http-allow-writes` | `false` | Expose Saved View management, attachment export, and deletion staging tools over StreamableHTTP. Enable only for trusted, authenticated clients. |
+| `--http` | — | Serve MCP over StreamableHTTP on this address instead of stdio. Bare ports bind to loopback, e.g. `8080` becomes `127.0.0.1:8080`. Non-loopback addresses require an effective inbound key or `--http-allow-insecure`. |
+| `--http-token-file` | — | On unreleased `main`, read an independent inbound bearer key from an owner-only file; takes priority over `--http-token-env`. Requires `--http`. |
+| `--http-token-env` | — | On unreleased `main`, name the environment variable holding an independent inbound bearer key. Requires `--http`. |
+| `--http-allow-insecure` | `false` | Allow non-loopback HTTP binding without an effective inbound key. A configured key is still enforced; without one, use only behind a trusted network boundary or authenticated reverse proxy. |
+| `--http-allow-writes` | `false` | Expose Saved View management, attachment export, and deletion staging tools over StreamableHTTP. Calendar event mutations also require `--allow-calendar-writes`. Enable only for trusted, authenticated clients. |
+| `--allow-calendar-writes` | `false` | Expose calendar event mutation tools. HTTP also requires `--http-allow-writes`; only enable for sessions where the user explicitly authorizes calendar writes. |
 
 See [MCP Server](/docs/usage/chat/) for configuration and tool reference.
 
@@ -3367,7 +3435,7 @@ msgvault daemon restart
 
 `start` launches the daemon in the background, `status` reports its recorded URL/PID/version/API schema/uptime, `stop` shuts it down, and `restart` performs a stop followed by a start. Starting a newer compatible binary replaces an older recorded daemon when `[server].daemon_auto_restart = "newer"`; incompatible running daemons are reported with a prompt to stop them first.
 
-The lifecycle commands have no command-specific flags. All configuration (port, bind address, API key, CORS, account schedules, SyncTech SMS sources, background idle timeout, daemon restart policy, and vector embedding schedule) is read from your `config.toml`. See [Web UI & API Server](/docs/api-server/) for endpoint documentation, run `msgvault openapi`, or fetch `/openapi.json` from a running server for the generated OpenAPI contract. See [Configuration](/docs/configuration/#server) for config options. When vector search is enabled, the daemon can also run the embed worker on a cron and/or after every successful sync, see [Configuration: vector.embed.schedule](/docs/configuration/#vectorembedschedule).
+The lifecycle commands have no command-specific flags. Configuration comes from `config.toml` with the [runtime environment overrides](configuration.md#environment-variables). See [Web UI & API Server](/docs/api-server/) for endpoint documentation, run `msgvault openapi`, or fetch `/openapi.json` from a running server for the generated OpenAPI contract. See [Configuration](/docs/configuration/#server) for config options. When vector search is enabled, the daemon can also run the embed worker on a cron and/or after every successful sync, see [Configuration: vector.embed.schedule](/docs/configuration/#vectorembedschedule).
 
 Background daemons started by `daemon start` or auto-started by a CLI command shut down after `[server].daemon_idle_timeout` with no requests. The default is `20m`; set it to `"0s"` to disable idle shutdown. `MSGVAULT_DAEMON_IDLE_TIMEOUT` can override the value for a lifecycle-managed background daemon.
 
@@ -3386,6 +3454,16 @@ msgvault serve
 ```
 
 `msgvault serve` stays in the foreground until interrupted and is not idle-stopped. Use it for externally supervised, Docker, and NAS deployments; use `msgvault daemon` for local background lifecycle management.
+
+On unreleased `main`, `--bind ADDRESS` and `--port PORT` override environment,
+TOML, and defaults. A port of `0` selects an open port. `--bind iface:NAME`
+resolves a named network interface at startup and fails before binding if it
+cannot find a usable address. See [runtime configuration](configuration.md#environment-variables)
+for environment-only deployment and persisted API keys.
+
+```sh
+msgvault serve --bind 0.0.0.0 --port 8080
+```
 
 ---
 
@@ -4011,7 +4089,7 @@ msgvault agent-token issue --label <name> \
 | Flag | Description |
 |---|---|
 | `--label <name>` | (required) Human-readable name for the grant |
-| `--permissions <perms>` | Comma-separated permissions: `draft.create` for `draft-reply`, `draft-compose`, and `draft-get`; `draft.edit` for `draft-get`, `draft-edit`, and `draft-recover`; `draft.delete` for `draft-get`, `draft-delete`, and `draft-recover` (see [managed drafts](#draft-get-draft-edit-draft-delete-and-draft-recover)) |
+| `--permissions <perms>` | Comma-separated permissions: `calendar.read` for availability, `calendar.event.read` for provider-derived event details in delegated plans and write receipts, `calendar.write` for calendar mutations, and additional `calendar.invite` for guest changes; `draft.create` for `draft-reply`, `draft-compose`, and `draft-get`; `draft.edit` for `draft-get`, `draft-edit`, and `draft-recover`; `draft.delete` for `draft-get`, `draft-delete`, and `draft-recover` (see [managed drafts](#draft-get-draft-edit-draft-delete-and-draft-recover)) |
 | `--source-ids <ids>` | Comma-separated source IDs that the permissions apply to |
 | `--sender <source-id>=<address>` | Restrict a source to one confirmed sender identity; repeat for multiple choices |
 
@@ -4021,7 +4099,10 @@ When `--sender` is omitted for a selected source, issuance snapshots every
 currently confirmed valid mailbox identity. Sender selections are stored as
 canonical mailbox keys and remain fixed until the token is revoked. Adding an
 alias later does not expand an existing grant. A source with no selected sender
-has no delegated draft sender authority.
+has no delegated draft sender authority. Calendar grants use exact calendar source
+identities and do not require a draft sender selection. Delegated callers can run
+`calendar` commands and `mcp` over stdio; the delegated MCP bridge exposes only
+calendar tools.
 
 The response includes the daemon address, the secret, and the granted source references.
 Pass `--agent-url <address>` and the file path to `--agent-token-file` when invoking delegated commands.
