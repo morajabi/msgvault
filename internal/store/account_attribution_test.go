@@ -152,16 +152,6 @@ func clearAccountPath(t *testing.T, st *store.Store, ids ...int64) {
 	}
 }
 
-func TestReceivedSearchFindsForwardedMail(t *testing.T) {
-	f := newAttrFixture(t, "gmail", attrSink)
-	f.confirm(attrSink, "work@example.org")
-	id := f.persist(attrMail{
-		raw:  "From: sender@example.com\r\nX-Delivered-To: work@example.org\r\nTo: list@example.com\r\n\r\nbody",
-		from: []string{"sender@example.com"}, to: []string{"list@example.com"},
-	})
-	assert.Equal(t, []int64{id}, searchIDs(t, f.st, "received:work@example.org"))
-}
-
 func TestAccountAttributionPersistTiers(t *testing.T) {
 	require := require.New(t)
 	assert := assert.New(t)

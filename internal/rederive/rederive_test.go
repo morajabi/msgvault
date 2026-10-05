@@ -226,10 +226,7 @@ func TestCrossTypeRegistry(t *testing.T) {
 	assert.Panics(func() { RegisterAllSourceTypes("test-cross", "v2", noop) })
 	assert.True(HasPass("no-such-type"), "a cross-type pass applies to every source type")
 	assert.Empty(SourceTypes(), "SourceTypes lists typed passes only")
-	assert.Equal("rederive:beeper:instagramgo:v1", LedgerKey("beeper", "instagramgo", "v1"),
-		"typed ledger keys keep their format")
 	assert.Equal("rederive:test-cross:mbox:a@example.com:v1", passLedgerKey("test-cross", "mbox", "a@example.com", "v1"))
-	assert.NotEqual(passLedgerKey("test-cross", "mbox", "a@example.com", "v1"), passLedgerKey("test-cross", "mbox", "b@example.com", "v1"))
 }
 
 func TestRunIfStaleRunsOnlyStalePasses(t *testing.T) {

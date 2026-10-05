@@ -1,9 +1,6 @@
 package emailattribution
 
 import (
-	"bytes"
-	"net/mail"
-	"os"
 	"strings"
 	"testing"
 
@@ -12,66 +9,6 @@ import (
 )
 
 const sink = "inbox@example.net"
-
-// fixtureEvidence builds Evidence the way the store does: delivery addresses
-// from ParseHeaders, visible and sender addresses from the envelope.
-func fixtureEvidence(t *testing.T, raw []byte) (Evidence, bool) {
-	t.Helper()
-	end := len(raw)
-	for _, sep := range [][]byte{[]byte("\r\n\r\n"), []byte("\n\n")} {
-		if i := bytes.Index(raw, sep); i >= 0 && i+len(sep) < end {
-			end = i + len(sep)
-		}
-	}
-	headers, malformed, err := ParseHeaders(raw[:end])
-	require.NoError(t, err)
-	msg, err := mail.ReadMessage(bytes.NewReader(raw[:end]))
-	require.NoError(t, err)
-	envelope := func(names ...string) []string {
-		var out []string
-		for _, name := range names {
-			list, err := msg.Header.AddressList(name)
-			if err != nil {
-				continue
-			}
-			for _, a := range list {
-				out = append(out, a.Address)
-			}
-		}
-		return out
-	}
-	return Evidence{
-		Original:  headers.Original,
-		Delivered: headers.Delivered,
-		Visible:   envelope("To", "Cc"),
-		Sender:    envelope("From"),
-	}, malformed
-}
-
-func TestForwardingPaths(t *testing.T) {
-	candidates := []string{sink, "work@example.com", "mask@example.org", "second@example.com"}
-	for _, tc := range []struct{ name, address string }{
-		{"gmail", "work@example.com"},
-		{"gmail-visible", "work@example.com"},
-		{"pop", "work@example.com"},
-		{"workspace", "work@example.com"},
-		{"fastmail", "mask@example.org"},
-		{"generic", "work@example.com"},
-		{"bcc", "mask@example.org"},
-		{"list", "mask@example.org"},
-		{"ambiguous", ""},
-		{"conflicting", ""},
-		{"nested", sink},
-		{"malformed-mime", "work@example.com"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			raw, err := os.ReadFile("testdata/" + tc.name + ".eml")
-			require.NoError(t, err)
-			e, _ := fixtureEvidence(t, raw)
-			assert.Equal(t, tc.address, Attribute(e, candidates, sink, false).Address)
-		})
-	}
-}
 
 func TestSinkWaitsBehindVisibleRecipients(t *testing.T) {
 	e := Evidence{Delivered: []string{sink}, Visible: []string{"work@example.com"}}

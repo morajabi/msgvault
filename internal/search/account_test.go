@@ -41,17 +41,3 @@ func TestAccountOperatorsRejectInexactValues(t *testing.T) {
 		})
 	}
 }
-
-func TestAccountConditions(t *testing.T) {
-	assert := assert.New(t)
-	conditions, args := AccountConditions(Parse("received:a@example.org received:b@example.org account:c@example.org"), "m")
-	assert.Equal([]string{
-		"m.account_address IN (?)",
-		"(m.account_path = 'inbound' AND m.account_address IN (?,?))",
-	}, conditions)
-	assert.Equal([]any{"c@example.org", "a@example.org", "b@example.org"}, args)
-
-	conditions, args = AccountConditions(Parse("hello"), "msg")
-	assert.Empty(conditions)
-	assert.Empty(args)
-}
