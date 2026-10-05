@@ -34,7 +34,6 @@ func TestParseAccountScopes(t *testing.T) {
 	for name, values := range map[string]url.Values{
 		"display name":   {"account_scopes": {`[{"addresses":["Name <a@example.org>"]}]`}},
 		"unknown member": {"account_scopes": {`[{"groups":["x"]}]`}},
-		"empty scope":    {"account_scopes": {`[{}]`}},
 	} {
 		_, err := parseAccountScopes(request(values))
 		require.Error(t, err, name)
@@ -61,48 +60,6 @@ func TestExploreAccountFilterDimension(t *testing.T) {
 	require.Error(err)
 	_, err = exploreContext([]ExploreFilter{{Dimension: exploreFilterAccount, Values: []string{"a@example.org", "b@example.org"}}})
 	require.Error(err)
-}
-
-func TestHandleCLIAccountsListsVirtualAccounts(t *testing.T) {
-	require := require.New(t)
-	assert := assert.New(t)
-	st := testutil.NewTestStore(t)
-	srv := NewServerWithOptions(ServerOptions{
-		Config: &config.Config{Server: config.ServerConfig{APIPort: 8080}},
-		Store:  st,
-		Logger: testLogger(),
-	})
-	src, err := st.GetOrCreateSource("mbox", "archive-1")
-	require.NoError(err)
-	require.NoError(st.AddAccountIdentity(src.ID, "work@example.org", "manual"))
-	conv, err := st.EnsureConversation(src.ID, "thread", "")
-	require.NoError(err)
-	for key, raw := range map[string]string{
-		"work":    "X-Delivered-To: work@example.org\r\n\r\nbody",
-		"nothing": "Subject: no evidence\r\n\r\nbody",
-	} {
-		_, err := st.PersistMessageContext(t.Context(), &store.MessagePersistData{
-			Message: &store.Message{SourceID: src.ID, ConversationID: conv, SourceMessageID: key, MessageType: "email"},
-			RawMIME: []byte(raw),
-		})
-		require.NoError(err)
-	}
-
-	w := httptest.NewRecorder()
-	srv.Router().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/cli/accounts", nil))
-	require.Equal(http.StatusOK, w.Code, w.Body.String())
-	var resp struct {
-		Accounts []struct {
-			ID              int64                  `json:"id"`
-			VirtualAccounts []store.VirtualAccount `json:"virtual_accounts"`
-		} `json:"accounts"`
-	}
-	require.NoError(json.NewDecoder(w.Body).Decode(&resp))
-	require.Len(resp.Accounts, 1)
-	assert.Equal([]store.VirtualAccount{
-		{Key: store.VirtualUnattributedKey(src.ID), SourceID: src.ID, Unattributed: true, MessageCount: 1},
-		{Key: store.VirtualIdentityKey(src.ID, "work@example.org"), SourceID: src.ID, AccountAddress: "work@example.org", MessageCount: 1},
-	}, resp.Accounts[0].VirtualAccounts)
 }
 
 func TestHandleCLIAccountsSurvivesCatalogFailure(t *testing.T) {

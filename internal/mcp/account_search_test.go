@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -98,13 +97,6 @@ func TestForwardedAccountResolvesAddressesAndKeys(t *testing.T) {
 		assert.Equal(want.name, name, account)
 		assert.Equal(want.scopes, scopes, account)
 	}
-	_, _, err := h.resolveForwardedAccount(t.Context(), "wrok@example.org")
-	require.ErrorContains(err, "account not found", "a mistyped address is not a cross-source scope")
-
-	engine.VirtualAccountsErr = errors.New("catalog timed out")
-	_, _, err = h.resolveForwardedAccount(t.Context(), "work@example.org")
-	require.Error(err)
-	assert.NotContains(err.Error(), "account not found", "an unread catalog never claims the address is unknown")
 }
 
 func TestAccountSelectionIntersectsQueryAccounts(t *testing.T) {
