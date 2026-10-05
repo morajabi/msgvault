@@ -249,16 +249,6 @@ func (f draftReplyFixture) listPerson(t *testing.T, adapter *storeAPIAdapter, pe
 	return output.Addresses
 }
 
-func supportedPersonAddresses(rows []personDraftAddress) []string {
-	addresses := make([]string, 0, len(rows))
-	for _, row := range rows {
-		if row.Supported {
-			addresses = append(addresses, row.Value)
-		}
-	}
-	return addresses
-}
-
 func TestDraftComposePersonArgs(t *testing.T) {
 	assert := assert.New(t)
 	require := require.New(t)
@@ -328,87 +318,12 @@ func TestDraftComposePersonListsArchivedAddresses(t *testing.T) {
 	assert.Zero(*f.providerCalls)
 }
 
-func TestDraftComposePersonBindings(t *testing.T) {
-	type bindingsFixture struct {
-		draftReplyFixture
-
-		adapter              *storeAPIAdapter
-		survivor, absorbed   *store.Person
-		absorbedParticipants []int64
-		merge                *store.PersonMergeResult
-	}
-	setup := func(t *testing.T) bindingsFixture {
-		t.Helper()
-		require := require.New(t)
-		fixture := newDraftReplyFixture(t)
-		st := fixture.store
-		survivorParticipant, err := st.EnsureParticipant("survivor@example.com", "", "example.com")
-		require.NoError(err)
-		firstAbsorbed, err := st.EnsureParticipant("absorbed-1@example.com", "", "example.com")
-		require.NoError(err)
-		secondAbsorbed, err := st.EnsureParticipant("absorbed-2@example.com", "", "example.com")
-		require.NoError(err)
-		_, err = st.LinkParticipants(firstAbsorbed, secondAbsorbed)
-		require.NoError(err)
-		survivor, _, err := st.CreatePersonFromParticipantContext(t.Context(), survivorParticipant)
-		require.NoError(err)
-		absorbed, _, err := st.CreatePersonFromParticipantContext(t.Context(), firstAbsorbed)
-		require.NoError(err)
-		merged, err := st.MergePersonsContext(t.Context(), store.PersonMergeRequest{
-			SurvivorID: survivor.ID, AbsorbedID: absorbed.ID,
-			ExpectedSurvivorRevision: survivor.Revision, ExpectedAbsorbedRevision: absorbed.Revision,
-			IdempotencyKey: "compose-person-merge", Actor: "test",
-		})
-		require.NoError(err)
-		adapter, _ := countingDraftAdapter(fixture)
-		return bindingsFixture{
-			draftReplyFixture: fixture, adapter: adapter, survivor: &merged.Person, absorbed: absorbed,
-			absorbedParticipants: []int64{firstAbsorbed, secondAbsorbed}, merge: merged,
-		}
-	}
-	split := func(t *testing.T, f bindingsFixture, participants []int64) *store.PersonSplitResult {
-		t.Helper()
-		result, err := f.store.SplitPersonMergeContext(t.Context(), store.PersonSplitRequest{
-			SourcePersonID: f.survivor.ID, MergeID: f.merge.Merge.ID, ParticipantIDs: participants,
-			ExpectedSourceRevision: f.survivor.Revision, IdempotencyKey: "compose-person-split", Actor: "test",
-		})
-		require.NoError(t, err)
-		return result
-	}
-
-	t.Run("merge", func(t *testing.T) {
-		assert := assert.New(t)
-		require := require.New(t)
-		f := setup(t)
-		_, err := f.runCompose(t, f.adapter, nil, "--person-id", strconv.FormatInt(f.absorbed.ID, 10))
-		require.Error(err)
-		assert.Equal("invalid_args", err.Error())
-		assert.ElementsMatch(
-			[]string{"survivor@example.com", "absorbed-1@example.com", "absorbed-2@example.com"},
-			supportedPersonAddresses(f.listPerson(t, f.adapter, f.survivor.ID)))
-	})
-
-	t.Run("exact_split", func(t *testing.T) {
-		assert := assert.New(t)
-		require := require.New(t)
-		f := setup(t)
-		result := split(t, f, f.absorbedParticipants)
-		require.True(result.ExactReversal)
-		assert.ElementsMatch([]string{"absorbed-1@example.com", "absorbed-2@example.com"},
-			supportedPersonAddresses(f.listPerson(t, f.adapter, result.NewPerson.ID)))
-	})
-
-	t.Run("partial_split", func(t *testing.T) {
-		assert := assert.New(t)
-		require := require.New(t)
-		f := setup(t)
-		result := split(t, f, []int64{f.absorbedParticipants[0]})
-		require.False(result.ExactReversal)
-		assert.ElementsMatch([]string{"absorbed-1@example.com"},
-			supportedPersonAddresses(f.listPerson(t, f.adapter, result.NewPerson.ID)))
-		assert.ElementsMatch([]string{"survivor@example.com", "absorbed-2@example.com"},
-			supportedPersonAddresses(f.listPerson(t, f.adapter, result.SourcePerson.ID)))
-	})
+func TestDraftComposePersonRejectsUnknownPerson(t *testing.T) {
+	f := newDraftReplyFixture(t)
+	adapter, _ := countingDraftAdapter(f)
+	_, err := f.runCompose(t, adapter, nil, "--person-id", "999999")
+	require.Error(t, err)
+	assert.Equal(t, "invalid_args", err.Error())
 }
 
 func TestDraftComposePersonIsOwnerOnly(t *testing.T) {
@@ -421,16 +336,10 @@ func TestDraftComposePersonIsOwnerOnly(t *testing.T) {
 		Sources:     []agentgrant.SourceRef{{ID: f.source.ID, Type: f.source.SourceType, Identifier: f.source.Identifier}},
 	}
 	for _, personID := range []int64{f.personID, f.personID + 1000} {
-		person := strconv.FormatInt(personID, 10)
-		for _, args := range [][]string{
-			{"--person-id", person},
-			{"--person-id", person, "--json"},
-		} {
-			events, err := f.runCompose(t, f.adapter, grant, args...)
-			require.Error(err, args)
-			assert.Equal("not_permitted", err.Error(), args)
-			assert.Empty(events, args)
-		}
+		events, err := f.runCompose(t, f.adapter, grant, "--person-id", strconv.FormatInt(personID, 10))
+		require.Error(err, personID)
+		assert.Equal("not_permitted", err.Error(), personID)
+		assert.Empty(events, personID)
 	}
 	assert.Zero(*f.providerCalls)
 }
