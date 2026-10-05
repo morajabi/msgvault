@@ -964,17 +964,33 @@ func TestMessageMediaOccurrences(t *testing.T) {
 			SourcePartKey: "beeper:photo", MediaType: "image", State: attachmentpolicy.StateSkipped,
 			SkipReason: attachmentpolicy.SkipSizeCap, Role: store.AttachmentRoleStandalone,
 			RoleSource: store.AttachmentRoleSourceImporterSemantics},
+		// Slack leaves media_type empty on files it never downloaded.
+		{Filename: "clip.mp3", MIMEType: "audio/mpeg", Size: 20, SourceAttachmentID: "slack:clip",
+			SourcePartKey: "slack:clip", State: attachmentpolicy.StateFailed,
+			SkipReason: attachmentpolicy.SkipFetchFailure, Role: store.AttachmentRoleStandalone,
+			RoleSource: store.AttachmentRoleSourceImporterSemantics},
+		// Importers can leave voice notes with a generic type and only a name.
+		{Filename: "note.OGG", MIMEType: "application/octet-stream", Size: 9, SourceAttachmentID: "beeper:note-ogg",
+			SourcePartKey: "beeper:note-ogg", State: attachmentpolicy.StateFailed,
+			SkipReason: attachmentpolicy.SkipFetchFailure, Role: store.AttachmentRoleStandalone,
+			RoleSource: store.AttachmentRoleSourceImporterSemantics},
+		{Filename: "memo.m4a", Size: 8, SourceAttachmentID: "beeper:memo-m4a",
+			SourcePartKey: "beeper:memo-m4a", State: attachmentpolicy.StateFailed,
+			SkipReason: attachmentpolicy.SkipFetchFailure, Role: store.AttachmentRoleStandalone,
+			RoleSource: store.AttachmentRoleSourceImporterSemantics},
 	} {
 		require.NoError(f.Store.UpsertAttachmentRecord(ctx, retained.messageID, write))
 	}
 	occurrences = list(retained.messageID)
-	require.Len(occurrences, 2)
+	require.Len(occurrences, 5)
 	assert.Equal("msgvault:retained", occurrences[0].OccurrenceRef)
-	assert.Equal("late.ogg", occurrences[1].Filename)
 	assert.Equal(int64(12), occurrences[1].Size)
-	assert.Empty(occurrences[1].OccurrenceRef)
 	assert.Empty(occurrences[1].RetentionState)
 	assert.Empty(occurrences[1].DocbankSourceID)
+	for i, filename := range []string{"late.ogg", "clip.mp3", "note.OGG", "memo.m4a"} {
+		assert.Equal(filename, occurrences[i+1].Filename)
+		assert.Empty(occurrences[i+1].OccurrenceRef, filename)
+	}
 
 	_, err = f.Store.ListMessageMediaOccurrences(ctx, "", retained.messageID)
 	require.Error(err)

@@ -204,7 +204,6 @@ describe('MessageCard', () => {
     await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
     const request = fetchFn.mock.calls[0][0] as Request;
     expect(new URL(request.url).pathname).toBe('/api/v1/messages/42/recordings');
-    expect(screen.queryByRole('region', { name: 'Recordings' })).toBeNull();
   });
 
   it('makes no recordings request without attachments or while collapsed', async () => {

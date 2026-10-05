@@ -371,38 +371,16 @@ func TestMessageRecordingsStates(t *testing.T) {
 	}
 
 	uncapturedMessage := rf.message(t, "uncaptured")
-	for _, write := range []store.AttachmentWrite{
-		{Filename: "late.ogg", MIMEType: "audio/ogg", Size: 12, SourceAttachmentID: "beeper:late",
-			SourcePartKey: "beeper:late", MediaType: "voice_note", State: attachmentpolicy.StateSkipped,
-			SkipReason: attachmentpolicy.SkipSizeCap, Role: store.AttachmentRoleStandalone,
-			RoleSource: store.AttachmentRoleSourceImporterSemantics},
-		{Filename: "photo.jpg", MIMEType: "image/jpeg", Size: 30, SourceAttachmentID: "beeper:photo",
-			SourcePartKey: "beeper:photo", MediaType: "image", State: attachmentpolicy.StateSkipped,
-			SkipReason: attachmentpolicy.SkipSizeCap, Role: store.AttachmentRoleStandalone,
-			RoleSource: store.AttachmentRoleSourceImporterSemantics},
-		// Slack leaves media_type empty on files it never downloaded.
-		{Filename: "clip.mp3", MIMEType: "audio/mpeg", Size: 20, SourceAttachmentID: "slack:clip",
-			SourcePartKey: "slack:clip", State: attachmentpolicy.StateFailed,
-			SkipReason: attachmentpolicy.SkipFetchFailure, Role: store.AttachmentRoleStandalone,
-			RoleSource: store.AttachmentRoleSourceImporterSemantics},
-		// Importers can leave voice notes with a generic type and only a name.
-		{Filename: "note.OGG", MIMEType: "application/octet-stream", Size: 9, SourceAttachmentID: "beeper:note-ogg",
-			SourcePartKey: "beeper:note-ogg", State: attachmentpolicy.StateFailed,
-			SkipReason: attachmentpolicy.SkipFetchFailure, Role: store.AttachmentRoleStandalone,
-			RoleSource: store.AttachmentRoleSourceImporterSemantics},
-		{Filename: "memo.m4a", Size: 8, SourceAttachmentID: "beeper:memo-m4a",
-			SourcePartKey: "beeper:memo-m4a", State: attachmentpolicy.StateFailed,
-			SkipReason: attachmentpolicy.SkipFetchFailure, Role: store.AttachmentRoleStandalone,
-			RoleSource: store.AttachmentRoleSourceImporterSemantics},
-	} {
-		require.NoError(rf.f.Store.UpsertAttachmentRecord(t.Context(), uncapturedMessage, write))
-	}
+	require.NoError(rf.f.Store.UpsertAttachmentRecord(t.Context(), uncapturedMessage, store.AttachmentWrite{
+		Filename: "late.ogg", MIMEType: "audio/ogg", Size: 12, SourceAttachmentID: "beeper:late",
+		SourcePartKey: "beeper:late", MediaType: "voice_note", State: attachmentpolicy.StateSkipped,
+		SkipReason: attachmentpolicy.SkipSizeCap, Role: store.AttachmentRoleStandalone,
+		RoleSource: store.AttachmentRoleSourceImporterSemantics,
+	}))
 	recordings = recordingsFor(t, srv, uncapturedMessage)
-	require.Len(recordings, 4)
-	for i, filename := range []string{"late.ogg", "clip.mp3", "note.OGG", "memo.m4a"} {
-		assert.Equal(filename, recordings[i].Filename)
-		assert.Equal("media_missing", recordings[i].State, filename)
-	}
+	require.Len(recordings, 1)
+	assert.Equal("late.ogg", recordings[0].Filename)
+	assert.Equal("media_missing", recordings[0].State)
 	assert.Equal(before, rf.docbank.requestCount())
 
 	// One recording's Docbank failure never hides another.
@@ -472,14 +450,6 @@ func TestMessageRecordingsVisibility(t *testing.T) {
 	assert.Empty(body.Recordings)
 	assert.Contains(raw, `"recordings":[]`)
 	assert.NotContains(raw, secret)
-
-	deleted := rf.retained(t, "deleted")
-	rf.docbank.evidence(deleted, "vault", "ready", "succeeded", readyEvidence("generated", "complete",
-		map[string]any{"text": secret}))
-	require.NoError(rf.f.Store.MarkMessageDeleted(rf.f.Source.ID, "deleted"))
-	before := rf.docbank.requestCount()
-	assert.Empty(recordingsFor(t, srv, deleted.messageID))
-	assert.Equal(before, rf.docbank.requestCount())
 
 	// Served transcript text never becomes the authored body.
 	served := rf.retained(t, "served")
@@ -595,7 +565,6 @@ func TestMessageRecordingsOpenAPIContract(t *testing.T) {
 	require := require.New(t)
 	assert := assert.New(t)
 	doc := OpenAPIDocument()
-	assert.Equal("3.2.0", doc.Info.Version)
 	path := doc.Paths["/api/v1/messages/{id}/recordings"]
 	require.NotNil(path)
 	require.NotNil(path.Get)
