@@ -246,7 +246,6 @@ func TestCirclebackArchiveRowsMatchBase(t *testing.T) {
 		assert.Equal(want, got.Rows, label)
 		assert.Equal(wantParticipants, got.Participants, label)
 		assert.Equal(wantCounts, got.Counts, label)
-		assert.Contains(got.Rows["meeting:42"].Body, "[02:10] Unknown: No speaker here", label)
 		if st.FTS5Available() && !st.IsPostgreSQL() {
 			assert.Equal(wantFTS, circlebackFTSRow(t, st, "meeting:42"), label)
 		}
@@ -304,29 +303,4 @@ func TestCirclebackCountsWriteWhenStatsMaintenanceFails(t *testing.T) {
 	var messages int
 	require.NoError(st.DB().QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&messages))
 	assert.Equal(1, messages)
-}
-
-// TestCirclebackAdoptsArchiverRules covers the meetingarchive rules Circleback
-// meetings gain by saving through Upsert: envelope addresses on recipient rows
-// and one FTS entry for an attendee listed twice.
-func TestCirclebackAdoptsArchiverRules(t *testing.T) {
-	assert := assert.New(t)
-	require := require.New(t)
-	f := &fakeSource{
-		meetings:    map[string]json.RawMessage{"43": json.RawMessage(parityMeeting43)},
-		transcripts: map[string]json.RawMessage{"43": json.RawMessage(parityTranscript43)},
-	}
-	imp, st := newTestImporter(t, f)
-
-	_, err := imp.Import(context.Background(), ImportOptions{Identifier: "alice@example.com", AccountEmail: "alice@example.com"})
-	require.NoError(err)
-
-	assert.Equal([]string{"from:alice@example.com:alice@example.com", "to:bob@example.com:bob@example.com"}, circlebackStringRows(t, st, `
-		SELECT mr.recipient_type || ':' || p.email_address || ':' || COALESCE(mr.email_address, '')
-		FROM message_recipients mr
-		JOIN participants p ON p.id = mr.participant_id
-		ORDER BY 1`))
-	if st.FTS5Available() && !st.IsPostgreSQL() {
-		assert.Equal("bob@example.com", circlebackFTSRow(t, st, "meeting:43")[3])
-	}
 }

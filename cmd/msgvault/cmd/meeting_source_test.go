@@ -228,6 +228,7 @@ func TestMeetingProviderErrorsMatchBase(t *testing.T) {
 		{name: "notion unknown", resolve: notionOne, args: []string{"laptop"}, cfg: twoNotion, wantErr: `no [[notion_meetings]] entry with identifier "laptop" (configured: Work, home)`},
 		{name: "notion multiple", resolve: notionOne, cfg: twoNotion, wantErr: "multiple [[notion_meetings]] sources configured; pass an identifier"},
 		{name: "notion named", resolve: notionOne, args: []string{"WORK"}, cfg: twoNotion, wantIDs: []string{"Work"}},
+		{name: "muesli nil config", resolve: muesliSelected, wantErr: "configuration is unavailable"},
 		{name: "muesli empty", resolve: muesliSelected, cfg: &config.Config{}, wantErr: "no [[muesli]] sources configured\n\n" + muesliConfigHint},
 		{name: "muesli unknown", resolve: muesliSelected, args: []string{"laptop"}, cfg: twoMuesli, wantErr: `no [[muesli]] entry with identifier "laptop" (configured: Work, home)`},
 		{name: "muesli all", resolve: muesliSelected, cfg: twoMuesli, wantIDs: []string{"Work", "home"}},
@@ -271,65 +272,24 @@ func TestMeetingProviderErrorsMatchBase(t *testing.T) {
 }
 
 func TestMeetingSourcesResolve(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
 	cfg := &config.Config{
-		Granola:        []config.GranolaSource{{Identifier: "Work"}},
-		Circleback:     []config.CirclebackSource{{Identifier: "Work"}, {Identifier: "home"}},
-		Muesli:         []config.MuesliSource{{Identifier: "Work"}, {Identifier: "home"}},
-		NotionMeetings: []config.NotionMeetingsSource{{Identifier: "Work"}, {Identifier: "home"}},
+		Granola:    []config.GranolaSource{{Identifier: "Work"}},
+		Circleback: []config.CirclebackSource{{Identifier: "Work"}, {Identifier: "home"}},
 	}
-	for _, tc := range []struct {
-		table    string
-		selected func(*config.Config, []string) ([]string, error)
-	}{
-		{"granola", func(cfg *config.Config, args []string) ([]string, error) {
-			sources, err := granolaSources(cfg).selected(args)
-			return meetingSourceIDs(sources, err, func(s config.GranolaSource) string { return s.Identifier })
-		}},
-		{"circleback", func(cfg *config.Config, args []string) ([]string, error) {
-			sources, err := circlebackSources(cfg).selected(args)
-			return meetingSourceIDs(sources, err, func(s config.CirclebackSource) string { return s.Identifier })
-		}},
-		{"muesli", func(cfg *config.Config, args []string) ([]string, error) {
-			sources, err := muesliSources(cfg).selected(args)
-			return meetingSourceIDs(sources, err, func(s config.MuesliSource) string { return s.Identifier })
-		}},
-		{"notion_meetings", func(cfg *config.Config, args []string) ([]string, error) {
-			sources, err := notionMeetingsSources(cfg).selected(args)
-			return meetingSourceIDs(sources, err, func(s config.NotionMeetingsSource) string { return s.Identifier })
-		}},
-	} {
-		t.Run(tc.table, func(t *testing.T) {
-			require := require.New(t)
-			_, err := tc.selected(nil, nil)
-			require.EqualError(err, "configuration is unavailable")
-			_, err = tc.selected(&config.Config{}, nil)
-			require.ErrorContains(err, "no [["+tc.table+"]] sources configured\n\n")
-			_, err = tc.selected(cfg, []string{"laptop"})
-			require.ErrorContains(err, "no [["+tc.table+"]] entry with identifier \"laptop\" (configured: Work")
-			ids, err := tc.selected(cfg, []string{"wORK"})
-			require.NoError(err)
-			assert.Equal(t, []string{"Work"}, ids, "identifiers match case-insensitively")
-		})
-	}
-
-	t.Run("no argument", func(t *testing.T) {
-		assert := assert.New(t)
-		require := require.New(t)
-		granola, err := granolaSources(cfg).selected(nil)
-		require.NoError(err)
-		ids, _ := meetingSourceIDs(granola, err, func(s config.GranolaSource) string { return s.Identifier })
-		assert.Equal([]string{"Work"}, ids, "a single entry is selected without an argument")
-		circleback, err := circlebackSources(cfg).selected(nil)
-		require.NoError(err)
-		ids, _ = meetingSourceIDs(circleback, err, func(s config.CirclebackSource) string { return s.Identifier })
-		assert.Equal([]string{"Work", "home"}, ids, "several entries are all selected without an argument")
-		_, err = circlebackSources(cfg).one(nil)
-		require.EqualError(err, "multiple [[circleback]] sources configured; pass an identifier")
-		only, err := granolaSources(cfg).one(nil)
-		require.NoError(err)
-		only.Identifier = "changed"
-		assert.Equal("Work", cfg.Granola[0].Identifier, "one returns a copy, not the configured entry")
-	})
+	granola, err := granolaSources(cfg).selected(nil)
+	require.NoError(err)
+	ids, _ := meetingSourceIDs(granola, err, func(s config.GranolaSource) string { return s.Identifier })
+	assert.Equal([]string{"Work"}, ids, "a single entry is selected without an argument")
+	circleback, err := circlebackSources(cfg).selected(nil)
+	require.NoError(err)
+	ids, _ = meetingSourceIDs(circleback, err, func(s config.CirclebackSource) string { return s.Identifier })
+	assert.Equal([]string{"Work", "home"}, ids, "several entries are all selected without an argument")
+	only, err := granolaSources(cfg).one(nil)
+	require.NoError(err)
+	only.Identifier = "changed"
+	assert.Equal("Work", cfg.Granola[0].Identifier, "one returns a copy, not the configured entry")
 }
 
 func TestFinishMeetingImport(t *testing.T) {
@@ -365,6 +325,7 @@ func TestFinishMeetingImport(t *testing.T) {
 			wantErr: "circleback sync work failed: provider failed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			require := require.New(t)
 			refreshes := 0
 
 			err := finishMeetingImport(tc.provider, "work", tc.writes, tc.importErr, tc.cancelErr, func() error {
@@ -373,9 +334,12 @@ func TestFinishMeetingImport(t *testing.T) {
 			})
 
 			if tc.wantErr == "" {
-				require.NoError(t, err)
+				require.NoError(err)
 			} else {
-				require.EqualError(t, err, tc.wantErr)
+				require.EqualError(err, tc.wantErr)
+			}
+			if tc.cancelErr != nil {
+				require.ErrorIs(err, context.Canceled)
 			}
 			assert.Equal(t, tc.wantRefreshes, refreshes)
 		})

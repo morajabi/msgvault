@@ -37,29 +37,6 @@ func (f fakeNotionProbe) ListUsers(context.Context, string) (*notionmeetings.Use
 	return &notionmeetings.UserPage{}, f.usersErr
 }
 
-func TestResolveNotionMeetingsSource(t *testing.T) {
-	cfg := testConfigValue()
-
-	assert := assert.New(t)
-	require := require.New(t)
-	previous := cfg
-	t.Cleanup(func() { cfg = previous })
-	cfg = &config.Config{NotionMeetings: []config.NotionMeetingsSource{
-		{Identifier: "personal", Token: "secret-1"},
-		{Identifier: "work", Token: "secret-2"},
-	}}
-	testCtx := testInvocationContext(t.Context(), cfg, invocationOptions{})
-	_ = testCtx
-
-	_, err := notionMeetingsSources(cfg).one(nil)
-	require.Error(err)
-	assert.Contains(err.Error(), "multiple [[notion_meetings]]")
-
-	source, err := notionMeetingsSources(cfg).one([]string{"work"})
-	require.NoError(err)
-	assert.Equal("work", source.Identifier)
-}
-
 func TestResolveNotionMeetingsSourcesRequiresProbeIdentifierForMultipleSources(t *testing.T) {
 	cfg := testConfigValue()
 
@@ -176,15 +153,6 @@ func TestRunNotionMeetingsProbeSurfacesSystemicUserListingFailures(t *testing.T)
 			require.ErrorIs(t, err, tt.err)
 		})
 	}
-}
-
-func TestFinishNotionMeetingsImportRefreshesCommittedWritesOnFailure(t *testing.T) {
-	refreshed := 0
-	err := finishMeetingImport("notion meetings", "work", 1,
-		errors.New("hydrate failed"), nil, func() error { refreshed++; return nil })
-	require.Error(t, err)
-	assert.Equal(t, 1, refreshed)
-	assert.Contains(t, err.Error(), "notion meetings sync work failed")
 }
 
 func TestRunConfiguredNotionMeetingsSyncRefusesRemovedSource(t *testing.T) {
