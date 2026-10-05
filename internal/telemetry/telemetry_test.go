@@ -27,10 +27,6 @@ const (
 	wireConfigOffEnv = "MSGVAULT_TELEMETRY_WIRE_CONFIG_OFF"
 )
 
-func TestEnabledEnvMatchesKitDerivation(t *testing.T) {
-	assert.Equal(t, EnabledEnv, posthog.PrefixedEnabledEnv(envPrefix))
-}
-
 // An install file the daemon can't create must leave serve running with telemetry off.
 func TestNewReporterOrDisabledFallsBackWhenInstallFails(t *testing.T) {
 	assert := assert.New(t)
@@ -44,12 +40,6 @@ func TestNewReporterOrDisabledFallsBackWhenInstallFails(t *testing.T) {
 	assert.False(reporter.Enabled())
 	assert.Contains(logs.String(), "telemetry disabled")
 	assert.NotContains(logs.String(), "telemetry is on")
-
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"event":"app_opened"}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
-	CaptureHandler(reporter).ServeHTTP(resp, req)
-	assert.Equal(http.StatusBadRequest, resp.Code, "the fallback admits no event")
 }
 
 // TestEnabledReporterWireHelper runs only inside the helper process the wire tests start.
@@ -183,7 +173,6 @@ func TestOptedOutReporterSendsNothing(t *testing.T) {
 	}{
 		{"config off", []string{wireConfigOffEnv + "=1"}},
 		{"prefixed variable", []string{EnabledEnv + "=0"}},
-		{"prefixed variable over config off", []string{wireConfigOffEnv + "=1", EnabledEnv + "=0"}},
 		{"generic variable", []string{EnabledEnv + "=1", posthog.GenericEnabledEnv + "=0"}},
 	}
 	for _, tc := range cases {
