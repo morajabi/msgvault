@@ -4,9 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"log/slog"
-	"os"
 	"strings"
 
 	"go.kenn.io/msgvault/internal/api"
@@ -28,13 +26,7 @@ func configureRecordingReferenceJob(ctx context.Context, sched *scheduler.Schedu
 		return nil
 	}
 	endpoint := strings.TrimRight(strings.TrimSpace(cfg.URL), "/")
-	client, err := docbankmedia.NewClient(endpoint, func() (string, error) {
-		key, ok := os.LookupEnv(cfg.APIKeyEnv)
-		if !ok || key == "" {
-			return "", errors.New("docbank API key is unavailable")
-		}
-		return key, nil
-	})
+	client, err := docbankmedia.NewClient(endpoint, cfg.ResolveAPIKey)
 	if err != nil {
 		return err
 	}
