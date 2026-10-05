@@ -1,0 +1,43 @@
+name: Inline source qualification
+
+on:
+  push:
+    branches: [codex/inline-source-ci]
+
+permissions:
+  contents: read
+
+env:
+  GOPROXY: https://proxy.golang.org|direct
+  GOMAXPROCS: "2"
+  GOFLAGS: -p=2
+  GOMEMLIMIT: 3GiB
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: 4e30f4a75c9c14d57d2f6852c5d3c1b1bdff715a
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install SQLite headers
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - name: Verify source and formatting
+        run: |
+          test "$(git rev-parse HEAD)" = "4e30f4a75c9c14d57d2f6852c5d3c1b1bdff715a"
+          test -z "$(gofmt -l $(git ls-files '*.go'))"
+      - name: Provider and configuration tests
+        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config ./internal/clirun
+      - name: Inline API CLI and store contracts
+        run: go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd ./internal/api ./internal/store -run 'Inline|SettingsSectionsAreConsistentWithTheirGroups|SettingsOpenAPIContract|FilesSearchRetainsCachedAttachmentAfterProviderResync|AttachmentIdentity|CommunicationService'
+      - name: Vet
+        run: go vet -tags "fts5 sqlite_vec" ./...
+      - name: Lint
+        run: make lint-ci
+      - name: API contract checks
+        run: make huma-check openapi-check
