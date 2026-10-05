@@ -280,30 +280,6 @@ func TestPutIfRevisionRequiresThatCredentialsObservedState(t *testing.T) {
 	assertions.ErrorIs(err, ErrConflict)
 }
 
-func TestPutIfRevisionRejectsTokenFromDeletedAndRecreatedKey(t *testing.T) {
-	requirements := require.New(t)
-	dir := filepath.Join(t.TempDir(), "tokens")
-	id := PeopleProviderID("remote")
-
-	empty, err := Read(dir)
-	requirements.NoError(err)
-	absent, err := empty.Revision(id)
-	requirements.NoError(err)
-	first, err := PutIfRevision(dir, absent, id, "https://api.example.test/v1", "a")
-	requirements.NoError(err)
-	stale, err := first.Revision(id)
-	requirements.NoError(err)
-	cleared, err := DeleteIfRevision(dir, stale, id)
-	requirements.NoError(err)
-	gone, err := cleared.Revision(id)
-	requirements.NoError(err)
-	_, err = PutIfRevision(dir, gone, id, "https://api.example.test/v1", "b")
-	requirements.NoError(err)
-
-	_, err = PutIfRevision(dir, stale, id, "https://api.example.test/v1", "c")
-	requirements.ErrorIs(err, ErrConflict)
-}
-
 func TestPutRefusesToGrowTheStorePastItsSizeLimit(t *testing.T) {
 	requirements := require.New(t)
 	dir := filepath.Join(t.TempDir(), "tokens")

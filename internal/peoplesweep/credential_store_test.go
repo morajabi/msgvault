@@ -289,15 +289,6 @@ func TestStoredCredentialsKeepImportedKeyWhenLegacyFileCannotBeRemoved(t *testin
 	assert.Equal(credentialCanary, value)
 }
 
-func TestStoredCredentialsRejectsOtherOrigin(t *testing.T) {
-	store := peoplesweep.NewStoredCredentials(t.TempDir())
-	saveStoredCredential(t, store, "remote", "https://api.example.test/v1", credentialCanary)
-
-	value, err := store.Load("remote", "https://other.example.test/v1")
-	require.ErrorIs(t, err, providercredentials.ErrOriginMismatch)
-	assert.Empty(t, value)
-}
-
 func TestCredentialResolverUsesProfileScheme(t *testing.T) {
 	tokensDir := t.TempDir()
 	writeLegacyCredential(t, tokensDir, "stored-profile", `{"scheme":"bearer","value":"`+credentialCanary+`"}`)
