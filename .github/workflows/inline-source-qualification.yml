@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 0ff8117f643e15dacd5795b23eb3e2e3824d2ed4
+          ref: 88df41591afff9ad6e4f2c6fc7844b430693b350
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
@@ -29,7 +29,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "0ff8117f643e15dacd5795b23eb3e2e3824d2ed4"
+          test "$(git rev-parse HEAD)" = "88df41591afff9ad6e4f2c6fc7844b430693b350"
           test -z "$(gofmt -l $(git ls-files '*.go'))"
       - name: Provider and configuration tests
         run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config ./internal/clirun
