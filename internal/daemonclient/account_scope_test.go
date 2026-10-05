@@ -47,7 +47,7 @@ func TestAccountScopesRequireCapableDaemon(t *testing.T) {
 		},
 	}
 	for name, call := range calls {
-		for _, version := range []string{"3.1.0", "3.2.0"} {
+		for _, version := range []string{"3.2.0", "3.3.0"} {
 			t.Run(name+"/"+version, func(t *testing.T) {
 				assert := assert.New(t)
 				var forwarded atomic.Int32
@@ -63,9 +63,9 @@ func TestAccountScopesRequireCapableDaemon(t *testing.T) {
 				}))
 				defer server.Close()
 				err := call(t.Context(), newTestStore(server, ""))
-				if version == "3.1.0" {
+				if version == "3.2.0" {
 					require.Error(t, err)
-					assert.Contains(err.Error(), "account filters require daemon API schema 3.2.0")
+					assert.Contains(err.Error(), "account filters require daemon API schema 3.3.0")
 					assert.Zero(forwarded.Load(), "no non-health request may reach an older daemon")
 					return
 				}
@@ -78,7 +78,7 @@ func TestAccountScopesRequireCapableDaemon(t *testing.T) {
 
 func TestAccountScopesNeverRideInQueryText(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSONResponse(t, w, map[string]any{"status": "ok", "api_schema_version": "3.2.0"})
+		writeJSONResponse(t, w, map[string]any{"status": "ok", "api_schema_version": "3.3.0"})
 	}))
 	defer server.Close()
 	q := &search.Query{TextTerms: []string{"invoice"}, AccountScopes: []search.AccountScope{{Unattributed: true}}}
@@ -109,7 +109,7 @@ func TestQueryAccountScopesTravelAsParameters(t *testing.T) {
 			var sawScopes atomic.Bool
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "/api/v1/health" {
-					writeJSONResponse(t, w, map[string]any{"status": "ok", "api_schema_version": "3.2.0"})
+					writeJSONResponse(t, w, map[string]any{"status": "ok", "api_schema_version": "3.3.0"})
 					return
 				}
 				sawScopes.Store(r.URL.Query().Get("account_scopes") == `[{"unattributed":true}]`)

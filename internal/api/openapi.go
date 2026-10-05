@@ -343,9 +343,9 @@ import (
 // 3.0.0 replaces unguarded identity decisions with review-token routes and adds consented identity scoring.
 // 3.1.0 adds opt-in calendar event control and availability queries.
 // 3.2.0 adds the account: and received: search operators.
-// 3.2.0 adds structured account scopes, the explore account filter and the
+// 3.3.0 adds structured account scopes, the explore account filter and the
 // virtual account catalog on /cli/accounts.
-const APISchemaVersion = "3.2.0"
+const APISchemaVersion = "3.3.0"
 
 // OpenAPIDocument builds the API schema from the same Huma route registration
 // used by the daemon. It binds no socket and needs no database.

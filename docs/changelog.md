@@ -16,7 +16,7 @@ All notable changes to msgvault, grouped by release.
 - Pick a receiving address or the unattributed mail of a source in the TUI
   account picker, the Web UI's Explore account filter, and the MCP `account`
   argument; vector and hybrid search accept `received:` and `account:`. API
-  schema 3.2.0.
+  schema 3.3.0.
 
 - Rerunning `import-whatsapp` on an Apple `ChatStorage.sqlite` writes only new
   and changed messages instead of rewriting the whole archive, and picks up

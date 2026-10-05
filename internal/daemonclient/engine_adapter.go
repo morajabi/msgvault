@@ -37,7 +37,7 @@ const (
 	accountAttributionMinAPISchemaVersion = "3.2.0"
 	// accountScopeMinAPISchemaVersion is the first daemon contract that reads
 	// structured account scopes from filters.
-	accountScopeMinAPISchemaVersion = "3.2.0"
+	accountScopeMinAPISchemaVersion = "3.3.0"
 )
 
 // Engine implements query.Engine by making HTTP calls to a msgvault daemon.
