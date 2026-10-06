@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 94cbb738f97e970208b9f9652b438dec256a679c
+          ref: c5b1525dfea9937c45322aa016416ef5dd289535
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -28,12 +28,28 @@ jobs:
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: Verify source, test-only scope and formatting
+      - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "94cbb738f97e970208b9f9652b438dec256a679c"
-          test "$(git diff --name-only dbd10c80eb3fa682a796fffa12e663bd4a4634c4 HEAD)" = "internal/inline/importer_test.go"
+          test "$(git rev-parse HEAD)" = "c5b1525dfea9937c45322aa016416ef5dd289535"
           test -z "$(gofmt -l $(git ls-files '*.go'))"
-      - name: Resume checkpoint compatibility regression
-        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run '^TestLoadSyncStateRejectsForeignAccountAndMalformedCursor$'
+      - name: Prove unfinished history starvation before the fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp internal/inline/importer.go "$RUNNER_TEMP/importer.go"
+          git show 94cbb738f97e970208b9f9652b438dec256a679c:internal/inline/importer.go > internal/inline/importer.go
+          if go test -tags "fts5 sqlite_vec" -count=1 -v ./internal/inline -run '^TestLimitedImportFinishesHistoryDespiteOngoingArrivals$' > "$RUNNER_TEMP/history-starvation.log" 2>&1; then
+            cat "$RUNNER_TEMP/history-starvation.log"
+            echo "Expected history-starvation regression was not reproduced"
+            exit 1
+          fi
+          grep -q '^--- FAIL: TestLimitedImportFinishesHistoryDespiteOngoingArrivals' "$RUNNER_TEMP/history-starvation.log"
+          echo "Reproduced within-chat history starvation"
+          cp "$RUNNER_TEMP/importer.go" internal/inline/importer.go
+          git diff --exit-code
+      - name: Full Inline provider regressions
+        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline
+      - name: Vet changed provider
+        run: go vet -tags "fts5 sqlite_vec" ./internal/inline
       - name: Lint
         run: make lint-ci
