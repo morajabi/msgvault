@@ -48,7 +48,7 @@ jobs:
               echo "Expected regression was not reproduced: $failure"
               exit 1
             fi
-            rg -q "^--- FAIL: $failure" "$log"
+            grep -q "^--- FAIL: $failure" "$log"
             echo "Reproduced: $failure"
           }
           expect_failure ./internal/inline '^TestLimitedImportsRotateChatsAcrossRestartsAndFullRepair$' TestLimitedImportsRotateChatsAcrossRestartsAndFullRepair
