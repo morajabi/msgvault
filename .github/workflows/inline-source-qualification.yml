@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 36d0796bc292302bfce84790568f7bab72982030
+          ref: dbd10c80eb3fa682a796fffa12e663bd4a4634c4
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -28,10 +28,39 @@ jobs:
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: Verify source, scope and formatting
+      - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "36d0796bc292302bfce84790568f7bab72982030"
-          test "$(git diff --name-only 9cfc996e5cdc55b2808eea70744564ee27132490 HEAD)" = "internal/inline/media_test.go"
+          test "$(git rev-parse HEAD)" = "dbd10c80eb3fa682a796fffa12e663bd4a4634c4"
           test -z "$(gofmt -l $(git ls-files '*.go'))"
-      - name: Media statistics and terminal retry regression
-        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run '^TestMediaImportPersistsAttachmentStatsForListingsAndSearch$'
+      - name: Prove the three regressions against prior production source
+        shell: bash
+        run: |
+          set -euo pipefail
+          paths=(cmd/msgvault/cmd/inline.go cmd/msgvault/cmd/sync_cache_refresh.go internal/inline/importer.go)
+          for path in "${paths[@]}"; do
+            cp "$path" "$RUNNER_TEMP/$(basename "$path")"
+            git show 36d0796bc292302bfce84790568f7bab72982030:"$path" > "$path"
+          done
+          expect_failure() {
+            local package="$1" pattern="$2" failure="$3" log="$RUNNER_TEMP/$3.log"
+            if go test -tags "fts5 sqlite_vec" -count=1 -v "$package" -run "$pattern" > "$log" 2>&1; then
+              cat "$log"
+              echo "Expected regression was not reproduced: $failure"
+              exit 1
+            fi
+            rg -q "^--- FAIL: $failure" "$log"
+            echo "Reproduced: $failure"
+          }
+          expect_failure ./internal/inline '^TestLimitedImportsRotateChatsAcrossRestartsAndFullRepair$' TestLimitedImportsRotateChatsAcrossRestartsAndFullRepair
+          expect_failure ./cmd/msgvault/cmd '^TestInlineSyncCommandsRouteToDaemon$' TestInlineSyncCommandsRouteToDaemon
+          expect_failure ./cmd/msgvault/cmd '^TestManualSyncRefreshQueuesVerificationInsideInterval$/^inline_media_backfill$' TestManualSyncRefreshQueuesVerificationInsideInterval
+          for path in "${paths[@]}"; do cp "$RUNNER_TEMP/$(basename "$path")" "$path"; done
+          git diff --exit-code
+      - name: Provider, config and CLI runner regressions
+        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config ./internal/clirun
+      - name: Actual daemon routing and parent cache jobs
+        run: go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run '^(TestInline|TestManualSyncRefreshQueuesVerificationInsideInterval|TestManualSyncProbeDoesNotQueueCacheRefresh)'
+      - name: Vet
+        run: go vet -tags "fts5 sqlite_vec" ./...
+      - name: Lint
+        run: make lint-ci
