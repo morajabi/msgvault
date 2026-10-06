@@ -38,7 +38,7 @@ jobs:
       - name: Verify built command surfaces and package provenance
         run: |
           set -euo pipefail
-          ./msgvault --version
+          ./msgvault version
           ./msgvault add-inline --help
           ./msgvault sync-inline --help
           ./msgvault backfill-inline-media --help
