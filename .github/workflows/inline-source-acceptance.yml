@@ -1,0 +1,54 @@
+name: Inline current-source acceptance binary
+
+on:
+  push:
+    branches: [codex/inline-source-acceptance]
+
+permissions:
+  contents: read
+
+env:
+  GOPROXY: https://proxy.golang.org|direct
+  GOMAXPROCS: "2"
+  GOFLAGS: -p=2
+  GOMEMLIMIT: 3GiB
+
+jobs:
+  macos:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: c5b1525dfea9937c45322aa016416ef5dd289535
+          fetch-depth: 0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: web/package.json
+      - name: Verify exact source and host
+        run: |
+          test "$(git rev-parse HEAD)" = "c5b1525dfea9937c45322aa016416ef5dd289535"
+          test "$(uname -m)" = "arm64"
+      - name: Build complete daemon and production browser assets
+        run: make build VERSION=inline-source-c5b1525 COMMIT=c5b1525dfea9937c45322aa016416ef5dd289535
+      - name: Verify built command surfaces and package provenance
+        run: |
+          set -euo pipefail
+          ./msgvault --version
+          ./msgvault add-inline --help
+          ./msgvault sync-inline --help
+          ./msgvault backfill-inline-media --help
+          mkdir -p acceptance-artifacts
+          printf '%s\n' 'c5b1525dfea9937c45322aa016416ef5dd289535' > acceptance-artifacts/source.txt
+          shasum -a 256 msgvault > acceptance-artifacts/CHECKSUMS.sha256
+          tar -czf acceptance-artifacts/msgvault-darwin-arm64.tar.gz msgvault
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: msgvault-inline-c5b1525-darwin-arm64
+          path: acceptance-artifacts/
+          if-no-files-found: error
+          retention-days: 3
