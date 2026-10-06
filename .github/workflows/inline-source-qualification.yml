@@ -20,24 +20,20 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: d8b5555498da6a7fd83cca800902963ec95355b7
+          ref: 9cfc996e5cdc55b2808eea70744564ee27132490
+          fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: Verify source and formatting
+      - name: Verify source, scope and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "d8b5555498da6a7fd83cca800902963ec95355b7"
+          test "$(git rev-parse HEAD)" = "9cfc996e5cdc55b2808eea70744564ee27132490"
+          test "$(git diff --name-only d8b5555498da6a7fd83cca800902963ec95355b7 HEAD)" = "internal/inline/media_test.go"
           test -z "$(gofmt -l $(git ls-files '*.go'))"
-      - name: Provider and configuration tests
-        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config ./internal/clirun
-      - name: Inline API CLI and store contracts
-        run: go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd ./internal/api ./internal/store -run 'Inline|SettingsSectionsAreConsistentWithTheirGroups|SettingsOpenAPIContract|FilesSearchRetainsCachedAttachmentAfterProviderResync|AttachmentIdentity|CommunicationService|ManualSyncRefreshQueuesVerificationInsideInterval|PurgeExcludedMedia|MediaPolicyForSlackdump'
-      - name: Vet
-        run: go vet -tags "fts5 sqlite_vec" ./...
-      - name: API contract checks
-        run: make huma-check openapi-check
+      - name: Media statistics and terminal retry regression
+        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run '^TestMediaImportPersistsAttachmentStatsForListingsAndSearch$'
       - name: Lint
         run: make lint-ci
