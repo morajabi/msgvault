@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: c5b1525dfea9937c45322aa016416ef5dd289535
+          ref: 0f0c057959fb3bc4da25ef666b2114fc2e28afe3
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -30,7 +30,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "c5b1525dfea9937c45322aa016416ef5dd289535"
+          test "$(git rev-parse HEAD)" = "0f0c057959fb3bc4da25ef666b2114fc2e28afe3"
           test -z "$(gofmt -l $(git ls-files '*.go'))"
       - name: Prove unfinished history starvation before the fix
         shell: bash
