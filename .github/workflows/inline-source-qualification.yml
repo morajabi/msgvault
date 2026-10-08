@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 0f0c057959fb3bc4da25ef666b2114fc2e28afe3
+          ref: a16d5f45265f001cebb20f7ce27c4e2a078e2ec6
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -30,8 +30,23 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "0f0c057959fb3bc4da25ef666b2114fc2e28afe3"
+          test "$(git rev-parse HEAD)" = "a16d5f45265f001cebb20f7ce27c4e2a078e2ec6"
           test -z "$(gofmt -l $(git ls-files '*.go'))"
+      - name: Prove large media timeout before the fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp internal/inline/media.go "$RUNNER_TEMP/media.go"
+          git show 0f0c057959fb3bc4da25ef666b2114fc2e28afe3:internal/inline/media.go > internal/inline/media.go
+          if go test -tags "fts5 sqlite_vec" -count=1 -v ./internal/inline -run '^TestMediaDownloadTimeoutScalesWithPolicyCap$' > "$RUNNER_TEMP/media-timeout.log" 2>&1; then
+            cat "$RUNNER_TEMP/media-timeout.log"
+            echo "Expected media timeout regression was not reproduced"
+            exit 1
+          fi
+          grep -q '^--- FAIL: TestMediaDownloadTimeoutScalesWithPolicyCap' "$RUNNER_TEMP/media-timeout.log"
+          cat "$RUNNER_TEMP/media-timeout.log"
+          cp "$RUNNER_TEMP/media.go" internal/inline/media.go
+          git diff --exit-code
       - name: Prove unfinished history starvation before the fix
         shell: bash
         run: |
@@ -49,7 +64,7 @@ jobs:
           git diff --exit-code
       - name: Full Inline provider regressions
         run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline
-      - name: Vet changed provider
-        run: go vet -tags "fts5 sqlite_vec" ./internal/inline
+      - name: Vet
+        run: go vet -tags "fts5 sqlite_vec" ./...
       - name: Lint
         run: make lint-ci
