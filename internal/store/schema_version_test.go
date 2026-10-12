@@ -82,6 +82,48 @@ func TestSchemaVersionLegacyMarker(t *testing.T) {
 	assert.Equal(store.SchemaVersion, version)
 }
 
+func TestSchemaVersionInlineServiceUpgrade(t *testing.T) {
+	require := require.New(t)
+	assert := assert.New(t)
+	s := testutil.NewTestStore(t)
+	ctx := t.Context()
+	uid, err := s.ArchiveUIDContext(ctx)
+	require.NoError(err)
+
+	// Version 3 archives predate the required Inline service seed.
+	_, err = s.DB().ExecContext(ctx, `DELETE FROM applied_migrations WHERE name = 'communication_services_inline_v1'`)
+	require.NoError(err)
+	_, err = s.DB().ExecContext(ctx, `DELETE FROM communication_services WHERE slug = 'inline'`)
+	require.NoError(err)
+	_, err = s.DB().ExecContext(ctx, `UPDATE archive_metadata SET value = '3' WHERE key = 'schema_version'`)
+	require.NoError(err)
+
+	require.ErrorContains(s.ValidateSchemaContext(ctx), "run setup")
+	version, err := s.SchemaVersionContext(ctx)
+	require.NoError(err)
+	assert.Equal(3, version, "read-only validation must leave the old completion marker alone")
+	_, err = s.ResolveCommunicationServiceContext(ctx, "inline")
+	require.ErrorIs(err, store.ErrServiceNotFound, "read-only validation must not seed the missing service")
+
+	require.NoError(s.InitSchemaContext(ctx))
+	require.NoError(s.ValidateSchemaContext(ctx))
+	version, err = s.SchemaVersionContext(ctx)
+	require.NoError(err)
+	assert.Equal(store.SchemaVersion, version)
+	service, err := s.ResolveCommunicationServiceContext(ctx, "inline")
+	require.NoError(err)
+	assert.True(service.IsSystem)
+	assert.Equal(store.ScopePolicyRequired, service.ScopePolicy)
+	var applied int
+	require.NoError(s.DB().QueryRowContext(ctx,
+		`SELECT count(*) FROM applied_migrations WHERE name = 'communication_services_inline_v1'`,
+	).Scan(&applied))
+	assert.Equal(1, applied)
+	again, err := s.ArchiveUIDContext(ctx)
+	require.NoError(err)
+	assert.Equal(uid, again, "setup must preserve the archive identity")
+}
+
 func TestSchemaVersionMalformedAndFuture(t *testing.T) {
 	req := require.New(t)
 	check := assert.New(t)
