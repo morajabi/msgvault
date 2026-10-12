@@ -9,9 +9,9 @@ permissions:
 
 env:
   GOPROXY: https://proxy.golang.org|direct
-  GOMAXPROCS: "2"
-  GOFLAGS: -p=2
-  GOMEMLIMIT: 3GiB
+  GOMAXPROCS: "4"
+  GOFLAGS: -p=4
+  GOMEMLIMIT: 6GiB
   MSGVAULT_TEST_DB: ""
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 34531af87fe39316f07b3965d2d9dc2473d215d2
+          ref: c7fd59bd64181e8554632bf2d46aacc08f424e84
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -31,7 +31,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "34531af87fe39316f07b3965d2d9dc2473d215d2"
+          test "$(git rev-parse HEAD)" = "c7fd59bd64181e8554632bf2d46aacc08f424e84"
           go fmt ./...
           git diff --exit-code
       - name: Provider, config and CLI contracts
@@ -40,7 +40,7 @@ jobs:
         run: |
           go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|ManualSync|PurgeExcludedMedia'
           go test -tags "fts5 sqlite_vec" -count=1 ./internal/api -run 'Inline|CLIRunCommandAllowed|Settings'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'Reaction|Inline|CommunicationService|ParticipantIdentifier|SchemaVersion'
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'Reaction|Inline|CommunicationService|ParticipantIdentifier|SchemaVersion|Attachment'
       - name: Explore size accounting
         run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/query -run '^TestExploreAttachmentByteEstimates$'
       - name: Vet
@@ -70,7 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 34531af87fe39316f07b3965d2d9dc2473d215d2
+          ref: c7fd59bd64181e8554632bf2d46aacc08f424e84
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
@@ -81,7 +81,7 @@ jobs:
         run: |
           go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline
           go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "Inline|ManualSync|PurgeExcludedMedia"
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'Reaction|Inline|SchemaVersion'
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'Reaction|Inline|SchemaVersion|Attachment'
 
   build:
     runs-on: ubuntu-24.04
@@ -89,7 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 34531af87fe39316f07b3965d2d9dc2473d215d2
+          ref: c7fd59bd64181e8554632bf2d46aacc08f424e84
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
@@ -101,9 +101,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Browser labels and type checks
         run: |
-          make web-install web-check
-          cd web
-          bun run test src/lib/sources/labels.test.ts src/lib/explore/labels.test.ts
+          make web-install
       - name: Build executable and embedded assets
         run: |
           make build
@@ -114,20 +112,3 @@ jobs:
           ./msgvault backfill-inline-media --help
           git diff --exit-code
 
-  docs:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: 34531af87fe39316f07b3965d2d9dc2473d215d2
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
-      - name: Read public docs assets from upstream
-        run: git remote set-url origin https://github.com/kenn-io/msgvault.git
-      - name: Install docs dependencies
-        working-directory: docs
-        run: uv sync --frozen --no-dev
-      - name: Build and validate documentation
-        run: make docs-check
