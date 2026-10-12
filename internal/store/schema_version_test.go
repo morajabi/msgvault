@@ -82,6 +82,48 @@ func TestSchemaVersionLegacyMarker(t *testing.T) {
 	assert.Equal(store.SchemaVersion, version)
 }
 
+func TestSchemaVersionInlineServiceUpgrade(t *testing.T) {
+	require := require.New(t)
+	assert := assert.New(t)
+	s := testutil.NewTestStore(t)
+	ctx := t.Context()
+	uid, err := s.ArchiveUIDContext(ctx)
+	require.NoError(err)
+
+	// Version 3 archives predate the required Inline service seed.
+	_, err = s.DB().ExecContext(ctx, `DELETE FROM applied_migrations WHERE name = 'communication_services_inline_v1'`)
+	require.NoError(err)
+	_, err = s.DB().ExecContext(ctx, `DELETE FROM communication_services WHERE slug = 'inline'`)
+	require.NoError(err)
+	_, err = s.DB().ExecContext(ctx, `UPDATE archive_metadata SET value = '3' WHERE key = 'schema_version'`)
+	require.NoError(err)
+
+	require.ErrorContains(s.ValidateSchemaContext(ctx), "run setup")
+	version, err := s.SchemaVersionContext(ctx)
+	require.NoError(err)
+	assert.Equal(3, version, "read-only validation must leave the old completion marker alone")
+	_, err = s.ResolveCommunicationServiceContext(ctx, "inline")
+	require.ErrorIs(err, store.ErrServiceNotFound, "read-only validation must not seed the missing service")
+
+	require.NoError(s.InitSchemaContext(ctx))
+	require.NoError(s.ValidateSchemaContext(ctx))
+	version, err = s.SchemaVersionContext(ctx)
+	require.NoError(err)
+	assert.Equal(store.SchemaVersion, version)
+	service, err := s.ResolveCommunicationServiceContext(ctx, "inline")
+	require.NoError(err)
+	assert.True(service.IsSystem)
+	assert.Equal(store.ScopePolicyRequired, service.ScopePolicy)
+	var applied int
+	require.NoError(s.DB().QueryRowContext(ctx,
+		`SELECT count(*) FROM applied_migrations WHERE name = 'communication_services_inline_v1'`,
+	).Scan(&applied))
+	assert.Equal(1, applied)
+	again, err := s.ArchiveUIDContext(ctx)
+	require.NoError(err)
+	assert.Equal(uid, again, "setup must preserve the archive identity")
+}
+
 func TestSchemaVersionMalformedAndFuture(t *testing.T) {
 	req := require.New(t)
 	check := assert.New(t)
@@ -113,11 +155,13 @@ var (
 		1: "08c288dc75ccc5c75f4513cf92a10f34a75b5e918f7ceea83bf870040e252358",
 		2: "ad86bbf0db74619be9eaefae6f34bcaad37f3520a9a302810c0fc867735cd4c1",
 		3: "bde397bba4bf884c55327b3956af11cd69400f7fdfdf60b34a05eaeeb5534b84",
+		4: "590073e4ae6cb97c04726843637940f5f7c3535182c39414f4c7164d180b1deb",
 	}
 	schemaContractPostgresDigests = []string{
 		1: "7c554ff06468af9bf30950e6e4f2954b52f84d7dd0e6708f4fdd932fda007ed3",
 		2: "7f207ef54527a376aebc79ee9c2217e3af0bfb1171ed98af2ef5504ea7dec7ca",
 		3: "a60a2d5f70be37cbfd6ea4bf8c264be5d70f1dec16dd87d611ead7c0b01ec823",
+		4: "eb98e839881205465d3cbcb39b7e2f38667d42d13d4f16fc5fdd1b3ea52a118e",
 	}
 )
 
