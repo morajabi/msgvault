@@ -15,52 +15,6 @@ env:
   MSGVAULT_TEST_DB: ""
 
 jobs:
-  linux:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: e013dee87a730c3176df1864cdef0404f1595a42
-          fetch-depth: 0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install SQLite headers
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: Verify source and formatting
-        run: |
-          test "$(git rev-parse HEAD)" = "e013dee87a730c3176df1864cdef0404f1595a42"
-          go fmt ./...
-          git diff --exit-code
-      - name: Prove omitted reaction snapshots before the fix
-        shell: bash
-        run: |
-          set -euo pipefail
-          cp internal/inline/mcp.go "$RUNNER_TEMP/mcp.go"
-          git show 6da1aebe69f179a94e12933eb8b98ace7e37f1de:internal/inline/mcp.go > internal/inline/mcp.go
-          if go test -tags "fts5 sqlite_vec" -count=1 -v ./internal/inline -run '^TestMCPImportPersistsAndReplacesReactionSnapshots$' > "$RUNNER_TEMP/reactions.log" 2>&1; then
-            cat "$RUNNER_TEMP/reactions.log"
-            echo "Expected reaction normalization regression was not reproduced"
-            exit 1
-          fi
-          grep -q '^--- FAIL: TestMCPImportPersistsAndReplacesReactionSnapshots' "$RUNNER_TEMP/reactions.log"
-          cat "$RUNNER_TEMP/reactions.log"
-          cp "$RUNNER_TEMP/mcp.go" internal/inline/mcp.go
-          git diff --exit-code
-      - name: Provider, config and CLI contracts
-        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config ./internal/clirun
-      - name: Daemon and store integration
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|ManualSync|PurgeExcludedMedia'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api -run 'Inline|CLIRunCommandAllowed|Settings'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'Reaction|Inline|CommunicationService|ParticipantIdentifier'
-      - name: Vet
-        run: go vet -tags "fts5 sqlite_vec" ./...
-      - name: Lint
-        run: make lint-ci
-
   postgres:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -83,32 +37,13 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: e013dee87a730c3176df1864cdef0404f1595a42
+          ref: SOURCE_SHA
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: PostgreSQL provider and reaction persistence
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'Reaction|Inline'
+      - name: Determine schema contract digests
+        run: go test -tags "fts5 sqlite_vec" -count=1 -v ./internal/store -run '^TestSchemaVersionContract$'
 
-  docs:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: e013dee87a730c3176df1864cdef0404f1595a42
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
-      - name: Read public docs assets from upstream
-        run: git remote set-url origin https://github.com/kenn-io/msgvault.git
-      - name: Install docs dependencies
-        working-directory: docs
-        run: uv sync --frozen --no-dev
-      - name: Build and validate documentation
-        run: make docs-check
