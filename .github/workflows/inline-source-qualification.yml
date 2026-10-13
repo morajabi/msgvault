@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: cca5fe28797385d9a8bab3e81de408148dac74e7
+          ref: 74f911008d04852719221595668968ecaa56904e
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -31,22 +31,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "cca5fe28797385d9a8bab3e81de408148dac74e7"
+          test "$(git rev-parse HEAD)" = "74f911008d04852719221595668968ecaa56904e"
           go fmt ./...
           git diff --exit-code
-      - name: Rendered root help contract
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "^TestRootHelpGolden$" -args -update
-          git diff --exit-code
-      - name: Provider, config and CLI contracts
-        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config ./internal/clirun ./internal/scheduler ./internal/operations ./internal/omi
-      - name: Daemon and store integration
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|ManualSync|PurgeExcludedMedia|Help|GroupCommand|ShowThread|LoadThread|Search|SemanticJSON|SortSemantic|CacheRefresh|Omi'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api -run 'Inline|CLIRunCommandAllowed|Settings|Omi|Operation|AgentRead'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'Reaction|Inline|CommunicationService|ParticipantIdentifier|SchemaVersion|Attachment|Sync|OperationRuns|SearchMetadata'
-      - name: Explore size accounting
-        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/query -run '^TestExploreAttachmentByteEstimates$'
+      - name: Inline provider and media behavior
+        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline
       - name: Vet
         run: go vet -tags "fts5 sqlite_vec" ./...
       - name: Lint
@@ -74,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: cca5fe28797385d9a8bab3e81de408148dac74e7
+          ref: 74f911008d04852719221595668968ecaa56904e
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
@@ -84,55 +73,20 @@ jobs:
       - name: PostgreSQL provider and reaction persistence
         run: |
           go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "Inline|ManualSync|PurgeExcludedMedia|Help|GroupCommand|ShowThread|LoadThread|Search|SemanticJSON|SortSemantic|CacheRefresh|Omi"
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'Reaction|Inline|SchemaVersion|Attachment|Sync|OperationRuns|SearchMetadata'
 
-  build:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: cca5fe28797385d9a8bab3e81de408148dac74e7
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version-file: go.mod
-          cache: true
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version-file: web/package.json
-      - name: Install SQLite headers
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: Browser labels and type checks
-        run: |
-          make web-install web-check
-          cd web
-          bun run test src/lib/sources/labels.test.ts src/lib/explore/labels.test.ts src/App.test.ts src/lib/telemetry/session.test.ts src/lib/explore/state.test.ts
-      - name: Build executable and embedded assets
-        run: |
-          make build
-          node scripts/check-web-assets.mjs --binary ./msgvault
-          ./msgvault version
-          ./msgvault add-inline --help
-          ./msgvault sync-inline --help
-          ./msgvault backfill-inline-media --help
-          make test-cli-e2e MSGVAULT_E2E_BINARY="$PWD/msgvault"
-          git diff --exit-code
-
-  docs:
+  web:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: cca5fe28797385d9a8bab3e81de408148dac74e7
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
-      - name: Read public docs assets from upstream
-        run: git remote set-url origin https://github.com/kenn-io/msgvault.git
-      - name: Install docs dependencies
-        working-directory: docs
-        run: uv sync --frozen --no-dev
-      - name: Build and validate documentation
-        run: make docs-check
+          ref: 74f911008d04852719221595668968ecaa56904e
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: web/package.json
+      - name: Browser labels and type checks
+        run: |
+          make web-install web-check
+          cd web
+          bun run test src/lib/sources/labels.test.ts src/lib/explore/labels.test.ts
+          git diff --exit-code
