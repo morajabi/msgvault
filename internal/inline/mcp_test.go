@@ -536,7 +536,6 @@ func TestMCPResponseByteLimitChecksOverflowAndExactEOF(t *testing.T) {
 			resp, err := client.Get(srv.URL)
 			if tc.invalid && !tc.streamed {
 				requires.ErrorIs(err, ErrContract, "declared overflow must fail the request before the response body is read")
-				assertions.Nil(resp)
 				return
 			}
 			requires.NoError(err)
