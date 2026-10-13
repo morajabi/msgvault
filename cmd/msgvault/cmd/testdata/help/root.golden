@@ -1,6 +1,5 @@
-msgvault keeps an offline, searchable archive of email, chat, and meeting
-records. A daemon owns the archive: commands start or reuse a local daemon,
-or use [remote].url from config.toml (--local forces the local daemon).
+msgvault archives email, chats, and meetings offline. Commands use a local daemon
+or config.toml's [remote].url; --local forces local use.
 
 Start here:
   msgvault list-accounts --json    # id, email, type, counts, sync
@@ -16,9 +15,9 @@ Start here:
   msgvault setup status --json  # features and next steps
 
 Output and exit status:
-  --json prints JSON on stdout (export-messages prints JSON Lines). Progress and
-  logs go to stderr; --log-level=warn quiets routine logs. Exit 0 success, 1 error,
-  130 interrupted. 'msgvault quickstart' has a longer agent guide.
+  --json: JSON stdout (export-messages: JSON Lines). Logs/progress: stderr.
+  --log-level=warn quiets logs. Exit: 0 success, 1 error, 130 interrupted.
+  See 'msgvault quickstart' for more.
 
 Usage:
   msgvault [command]
