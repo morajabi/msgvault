@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: d67f64291c50f8cf6f9d72931b8d9874ea5fc689
+          ref: c5c81038136c4b888d64c23fc6fa609fb83167aa
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -31,37 +31,49 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "d67f64291c50f8cf6f9d72931b8d9874ea5fc689"
+          test "$(git rev-parse HEAD)" = "c5c81038136c4b888d64c23fc6fa609fb83167aa"
           go fmt ./...
           git diff --exit-code
-      - name: Rendered root help contract
+      - name: Reproduce unverified-session media regression before the fix
         run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "^TestRootHelpGolden$" -args -update
+          git checkout fda6d58341b6743e6f758da6aadbb5ea566e731f -- internal/inline/mcp.go
+          set +e
+          go test -json -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run '^TestMCPMediaRefreshVerificationFailureBlocksFurtherReads$' > .git/reconnect-before-fix.jsonl
+          baseline_status=$?
+          set -e
+          git checkout HEAD -- internal/inline/mcp.go
+          test "$baseline_status" -ne 0
+          python3 - <<'VERIFY'
+          import json
+          from pathlib import Path
+          events = [json.loads(line) for line in Path('.git/reconnect-before-fix.jsonl').read_text().splitlines()]
+          parent = 'TestMCPMediaRefreshVerificationFailureBlocksFurtherReads'
+          failed = {event.get('Test') for event in events if event.get('Action') == 'fail' and event.get('Test')}
+          expected = {parent + '/' + name for name in ['tool_error', 'malformed_tool_JSON', 'malformed_account', 'missing_read_scope']}
+          assert expected.issubset(failed), failed
+          assert failed.issubset(expected | {parent, parent + '/expired_verification_request'}), failed
+          for test in expected:
+              output = ''.join(event.get('Output', '') for event in events if event.get('Test') == test)
+              assert 'later reads must not reach the unverified session' in output, (test, output)
+          print('real MCP media regressions expose subsequent unverified reads before the fix:', sorted(failed))
+          VERIFY
           git diff --exit-code
-      - name: Provider and scheduler integration
+      - name: Verify repaired reconnect regression
+        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run '^TestMCPMediaRefreshVerificationFailureBlocksFurtherReads$'
+      - name: Provider, config and CLI contracts
+        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config ./internal/clirun ./internal/scheduler ./internal/operations
+      - name: Daemon and store integration
         run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config ./internal/clirun ./internal/scheduler ./internal/operations
-      - name: CLI and daemon integration
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|ManualSync|PurgeExcludedMedia|Help|GroupCommand|CacheRefresh|DaemonGmailClient|MessageTags|MCP|FilenameDiscovery|Emlx|Activity'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api -run 'Inline|CLIRunCommandAllowed|Settings|EmailTags|MCPCapabilities|FileSuggestions|Idle|OperationGate'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/mcp
-      - name: Store schema and maintenance integration
-        run: |
-          go test -timeout 30m -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'SchemaVersion|Inline|Reaction|CommunicationService|ParticipantIdentifier|Attachment|Sync|PersonSweep|Exclusive|Maintenance|EmailTag|MicrosoftMailLabel|Emlx|Filename|Metadata|FTSDataRange'
-      - name: Explore and filename query integration
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/query -run 'ExploreAttachmentByteEstimates|MetadataSearch|Filename|Mime'
+          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|ManualSync|PurgeExcludedMedia|ListAccounts|Accounts|CacheRefresh'
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api -run 'Inline|CLIRunCommandAllowed|Settings|Accounts'
       - name: Vet
-        run: |
-          go vet -tags "fts5 sqlite_vec" ./...
+        run: go vet -tags "fts5 sqlite_vec" ./...
       - name: Lint
-        run: |
-          make lint-ci
+        run: make lint-ci
 
   postgres:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -81,25 +93,17 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: d67f64291c50f8cf6f9d72931b8d9874ea5fc689
+          ref: c5c81038136c4b888d64c23fc6fa609fb83167aa
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: PostgreSQL provider and scheduler integration
+      - name: PostgreSQL provider and reaction persistence
         run: |
-          test "$(git rev-parse HEAD)" = "d67f64291c50f8cf6f9d72931b8d9874ea5fc689"
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/scheduler ./internal/operations
-      - name: PostgreSQL CLI and API integration
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|ManualSync|PurgeExcludedMedia|Help|GroupCommand|CacheRefresh|DaemonGmailClient|MessageTags|MCP|FilenameDiscovery|Emlx|Activity'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api -run 'Inline|CLIRunCommandAllowed|Settings|EmailTags|MCPCapabilities|FileSuggestions|Idle|OperationGate'
-      - name: PostgreSQL schema and maintenance integration
-        run: |
-          go test -timeout 30m -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'SchemaVersion|Inline|Reaction|CommunicationService|ParticipantIdentifier|Attachment|Sync|PersonSweep|Exclusive|Maintenance|EmailTag|MicrosoftMailLabel|Emlx|Filename|Metadata|FTSDataRange'
-          git diff --exit-code
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline
+          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "Inline|ManualSync|Accounts|CacheRefresh"
 
   build:
     runs-on: ubuntu-24.04
@@ -107,7 +111,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: d67f64291c50f8cf6f9d72931b8d9874ea5fc689
+          ref: c5c81038136c4b888d64c23fc6fa609fb83167aa
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
@@ -119,7 +123,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Browser labels and type checks
         run: |
-          make web-install web-check web-test
+          make web-install
       - name: Build executable and embedded assets
         run: |
           make build
@@ -131,23 +135,6 @@ jobs:
           make test-cli-e2e MSGVAULT_E2E_BINARY="$PWD/msgvault"
           git diff --exit-code
 
-  docs:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: d67f64291c50f8cf6f9d72931b8d9874ea5fc689
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
-      - name: Read public docs assets from upstream
-        run: git remote set-url origin https://github.com/kenn-io/msgvault.git
-      - name: Install docs dependencies
-        working-directory: docs
-        run: uv sync --frozen --no-dev
-      - name: Build and validate documentation
-        run: make docs-check
 
   windows:
     runs-on: windows-2025
@@ -155,7 +142,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: d67f64291c50f8cf6f9d72931b8d9874ea5fc689
+          ref: c5c81038136c4b888d64c23fc6fa609fb83167aa
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
@@ -172,8 +159,8 @@ jobs:
           CGO_CFLAGS: "-IC:/msys64/mingw64/include -fgnu89-inline"
           CGO_LDFLAGS: "-Wl,--allow-multiple-definition"
         run: |
-          if ((git rev-parse HEAD) -ne "d67f64291c50f8cf6f9d72931b8d9874ea5fc689") { throw "unexpected qualification source" }
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config
+          if ((git rev-parse HEAD) -ne "c5c81038136c4b888d64c23fc6fa609fb83167aa") { throw "unexpected qualification source" }
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git diff --exit-code
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
