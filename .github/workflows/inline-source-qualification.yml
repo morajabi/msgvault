@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 4163452e38e76e028fa7a7a8c097d6018d51df93
+          ref: f11a814556ef83646d51b2faa8b45ad2aab70f0a
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -31,11 +31,42 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "4163452e38e76e028fa7a7a8c097d6018d51df93"
+          test "$(git rev-parse HEAD)" = "f11a814556ef83646d51b2faa8b45ad2aab70f0a"
           go fmt ./...
           git diff --exit-code
-      - name: SQLite schema version readiness and contract
-        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./internal/store -run '^TestSchemaVersion'
+      - name: Reproduce stale backfill cache before the fix
+        run: |
+          git checkout 3e5aec7b8b1240166ee0039020da6d64417e0230 -- internal/inline/media.go
+          set +e
+          go test -json -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run '^TestBuildCache_RefreshesInlineBackfillSize$' > .git/backfill-cache-before-fix.jsonl
+          baseline_status=$?
+          set -e
+          git checkout HEAD -- internal/inline/media.go
+          test "$baseline_status" -ne 0
+          python3 - <<'VERIFY'
+          import json
+          from pathlib import Path
+          events = [json.loads(line) for line in Path('.git/backfill-cache-before-fix.jsonl').read_text().splitlines()]
+          name = 'TestBuildCache_RefreshesInlineBackfillSize'
+          failed = {event.get('Test') for event in events if event.get('Action') == 'fail' and event.get('Test')}
+          assert failed == {name}, failed
+          output = ''.join(event.get('Output', '') for event in events if event.get('Test') == name)
+          assert 'normal refresh must replace the previously cached provider size' in output, output
+          print('normal cache refresh retains stale provider size before the fix')
+          VERIFY
+          git diff --exit-code
+      - name: Verify repaired cache and checkpoint regressions
+        run: |
+          go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run '^TestBuildCache_RefreshesInlineBackfillSize$'
+          go test -v -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run '^TestMediaBackfillRecordsSuccessfulSourceSyncAndPreservesResumeState$'
+      - name: Provider, config and CLI contracts
+        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config ./internal/clirun ./internal/scheduler ./internal/operations
+      - name: Daemon and store integration
+        run: |
+          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|ManualSync|PurgeExcludedMedia|ListAccounts|Accounts|CacheRefresh|BuildCache'
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api -run 'Inline|CLIRunCommandAllowed|Settings|Accounts'
+      - name: Sync completion store contracts
+        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run "Sync.*(Complete|Preserve|Checkpoint)|Complete.*Sync"
       - name: Vet
         run: go vet -tags "fts5 sqlite_vec" ./...
       - name: Lint
@@ -63,13 +94,74 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 4163452e38e76e028fa7a7a8c097d6018d51df93
+          ref: f11a814556ef83646d51b2faa8b45ad2aab70f0a
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: PostgreSQL schema version readiness and contract
+      - name: PostgreSQL provider and checkpoint persistence
         run: |
-          go test -v -tags "fts5 sqlite_vec" -count=1 ./internal/store -run "^TestSchemaVersion"
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline
+          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "Inline|ManualSync|Accounts|CacheRefresh"
+
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: f11a814556ef83646d51b2faa8b45ad2aab70f0a
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: web/package.json
+      - name: Install SQLite headers
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - name: Browser labels and type checks
+        run: |
+          make web-install
+      - name: Build executable and embedded assets
+        run: |
+          make build
+          node scripts/check-web-assets.mjs --binary ./msgvault
+          ./msgvault version
+          ./msgvault add-inline --help
+          ./msgvault sync-inline --help
+          ./msgvault backfill-inline-media --help
+          make test-cli-e2e MSGVAULT_E2E_BINARY="$PWD/msgvault"
+          git diff --exit-code
+
+
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: f11a814556ef83646d51b2faa8b45ad2aab70f0a
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install SQLite development headers
+        shell: pwsh
+        run: |
+          C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed mingw-w64-x86_64-sqlite3
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Windows Inline provider and config behavior
+        shell: pwsh
+        env:
+          CGO_ENABLED: "1"
+          CGO_CFLAGS: "-IC:/msys64/mingw64/include -fgnu89-inline"
+          CGO_LDFLAGS: "-Wl,--allow-multiple-definition"
+        run: |
+          if ((git rev-parse HEAD) -ne "f11a814556ef83646d51b2faa8b45ad2aab70f0a") { throw "unexpected qualification source" }
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
