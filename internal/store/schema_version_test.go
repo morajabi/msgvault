@@ -83,7 +83,7 @@ func TestSchemaVersionLegacyMarker(t *testing.T) {
 }
 
 func TestSchemaVersionInlineServiceUpgrade(t *testing.T) {
-	for _, legacyVersion := range []int{3, 4, 5} {
+	for _, legacyVersion := range []int{3, 4, 5, 6} {
 		t.Run(strconv.Itoa(legacyVersion), func(t *testing.T) {
 			require := require.New(t)
 			assert := assert.New(t)
@@ -93,7 +93,8 @@ func TestSchemaVersionInlineServiceUpgrade(t *testing.T) {
 			require.NoError(err)
 
 			// Completed pre-Inline setup, including the version 4 recording
-			// tables and version 5 metadata indexes, must require the service seed.
+			// tables, version 5 metadata indexes and version 6 native email tags,
+			// must require the service seed.
 			_, err = s.DB().ExecContext(ctx, `DELETE FROM applied_migrations WHERE name = 'communication_services_inline_v1'`)
 			require.NoError(err)
 			_, err = s.DB().ExecContext(ctx, `DELETE FROM communication_services WHERE slug = 'inline'`)
@@ -162,7 +163,7 @@ var (
 		3: "bde397bba4bf884c55327b3956af11cd69400f7fdfdf60b34a05eaeeb5534b84",
 		4: "ed0092e4f507e327350bb9bbf2f0cfcd3cb8e53c9ca57f509c514e7e3f68579e",
 		5: "ed0092e4f507e327350bb9bbf2f0cfcd3cb8e53c9ca57f509c514e7e3f68579e",
-		6: "38d7bd635dee573aaf56bbf5f4e76b82fa34430a9226cfb56f1319889ef1702e",
+		6: "c4e06b60819045ffe63afda9caeb916e2b5f9d3b77f7ffc7c06b037625a8a2b7",
 	}
 	schemaContractPostgresDigests = []string{
 		1: "7c554ff06468af9bf30950e6e4f2954b52f84d7dd0e6708f4fdd932fda007ed3",
@@ -170,7 +171,7 @@ var (
 		3: "a60a2d5f70be37cbfd6ea4bf8c264be5d70f1dec16dd87d611ead7c0b01ec823",
 		4: "68f409716bd517ddda67402e966ff5d8fb2d00326ffef42fedccb77a0f11584c",
 		5: "68f409716bd517ddda67402e966ff5d8fb2d00326ffef42fedccb77a0f11584c",
-		6: "553326dd5ae82904273d88095bfeca46044921201822f4f12883a20ee205ec54",
+		6: "9a63d5ae5ad40ebca9500de9b3de10cdbce185d7ca8f0039e49db3b22e2f2fc0",
 	}
 )
 
