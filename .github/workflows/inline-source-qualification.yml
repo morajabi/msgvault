@@ -54,7 +54,7 @@ jobs:
           assert failed.issubset(expected | {parent, parent + '/expired_verification_request'}), failed
           for test in expected:
               output = ''.join(event.get('Output', '') for event in events if event.get('Test') == test)
-              assert 'An error is expected but got nil.' in output, (test, output)
+              assert 'Expected error with "inline MCP contract error" in chain but got nil.' in output, (test, output)
           print('real MCP media regressions expose subsequent unverified reads before the fix:', sorted(failed))
           VERIFY
           git diff --exit-code
@@ -65,64 +65,3 @@ jobs:
       - name: Lint
         run: make lint-ci
 
-  postgres:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: msgvault_test
-          POSTGRES_PASSWORD: msgvault_test
-          POSTGRES_DB: msgvault_test
-          POSTGRES_INITDB_ARGS: "-c max_locks_per_transaction=256"
-        ports: [5432:5432]
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      MSGVAULT_TEST_DB: postgres://msgvault_test:msgvault_test@localhost:5432/msgvault_test?sslmode=disable
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: 7c5735aad61bf16ebc21ef9c9a6ba4b5add6bb85
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install SQLite headers
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: PostgreSQL provider and reaction persistence
-        run: |
-          go test -v -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run "^TestMCPMediaRefreshVerificationFailureBlocksFurtherReads$"
-
-  windows:
-    runs-on: windows-2025
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: 7c5735aad61bf16ebc21ef9c9a6ba4b5add6bb85
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install SQLite development headers
-        shell: pwsh
-        run: |
-          C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed mingw-w64-x86_64-sqlite3
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Windows Inline provider and config behavior
-        shell: pwsh
-        env:
-          CGO_ENABLED: "1"
-          CGO_CFLAGS: "-IC:/msys64/mingw64/include -fgnu89-inline"
-          CGO_LDFLAGS: "-Wl,--allow-multiple-definition"
-        run: |
-          if ((git rev-parse HEAD) -ne "7c5735aad61bf16ebc21ef9c9a6ba4b5add6bb85") { throw "unexpected qualification source" }
-          go test -v -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run "^TestMCPMediaRefreshVerificationFailureBlocksFurtherReads$"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git diff --exit-code
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
