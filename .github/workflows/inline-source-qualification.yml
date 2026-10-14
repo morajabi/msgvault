@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 7c5735aad61bf16ebc21ef9c9a6ba4b5add6bb85
+          ref: 4163452e38e76e028fa7a7a8c097d6018d51df93
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -31,37 +31,45 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "7c5735aad61bf16ebc21ef9c9a6ba4b5add6bb85"
+          test "$(git rev-parse HEAD)" = "4163452e38e76e028fa7a7a8c097d6018d51df93"
           go fmt ./...
           git diff --exit-code
-      - name: Reproduce unverified-session media regression before the fix
-        run: |
-          git checkout fda6d58341b6743e6f758da6aadbb5ea566e731f -- internal/inline/mcp.go
-          set +e
-          go test -json -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run '^TestMCPMediaRefreshVerificationFailureBlocksFurtherReads$' > .git/reconnect-before-fix.jsonl
-          baseline_status=$?
-          set -e
-          git checkout HEAD -- internal/inline/mcp.go
-          test "$baseline_status" -ne 0
-          python3 - <<'VERIFY'
-          import json
-          from pathlib import Path
-          events = [json.loads(line) for line in Path('.git/reconnect-before-fix.jsonl').read_text().splitlines()]
-          parent = 'TestMCPMediaRefreshVerificationFailureBlocksFurtherReads'
-          failed = {event.get('Test') for event in events if event.get('Action') == 'fail' and event.get('Test')}
-          expected = {parent + '/' + name for name in ['tool_error', 'malformed_tool_JSON', 'malformed_account', 'missing_read_scope']}
-          assert expected.issubset(failed), failed
-          assert failed.issubset(expected | {parent, parent + '/expired_verification_request'}), failed
-          for test in expected:
-              output = ''.join(event.get('Output', '') for event in events if event.get('Test') == test)
-              assert 'Expected error with "inline MCP contract error" in chain but got nil.' in output, (test, output)
-          print('real MCP media regressions expose subsequent unverified reads before the fix:', sorted(failed))
-          VERIFY
-          git diff --exit-code
-      - name: Verify repaired reconnect regression
-        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run '^TestMCPMediaRefreshVerificationFailureBlocksFurtherReads$'
+      - name: SQLite schema version readiness and contract
+        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./internal/store -run '^TestSchemaVersion'
       - name: Vet
         run: go vet -tags "fts5 sqlite_vec" ./...
       - name: Lint
         run: make lint-ci
 
+  postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: msgvault_test
+          POSTGRES_PASSWORD: msgvault_test
+          POSTGRES_DB: msgvault_test
+          POSTGRES_INITDB_ARGS: "-c max_locks_per_transaction=256"
+        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      MSGVAULT_TEST_DB: postgres://msgvault_test:msgvault_test@localhost:5432/msgvault_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: 4163452e38e76e028fa7a7a8c097d6018d51df93
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install SQLite headers
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - name: PostgreSQL schema version readiness and contract
+        run: |
+          go test -v -tags "fts5 sqlite_vec" -count=1 ./internal/store -run "^TestSchemaVersion"
