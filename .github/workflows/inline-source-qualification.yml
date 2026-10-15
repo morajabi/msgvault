@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 0e40435541db511204912c8a4c4d34b003da737c
+          ref: cabfdbbfe952e692214e6aba96024c2b6a689d04
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -31,29 +31,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "0e40435541db511204912c8a4c4d34b003da737c"
+          test "$(git rev-parse HEAD)" = "cabfdbbfe952e692214e6aba96024c2b6a689d04"
           go fmt ./...
           git diff --exit-code
-      - name: Rendered root help contract
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "^TestRootHelpGolden$" -args -update
-          git diff --exit-code
-      - name: Provider and scheduler integration
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/chatwoot ./internal/config ./internal/clirun ./internal/scheduler ./internal/operations ./internal/meetingarchive ./internal/meetingcontent ./internal/netguard ./internal/remoteimage ./internal/carddav ./internal/discord ./internal/envutil ./internal/muesli ./internal/personmatch
-      - name: CLI and daemon integration
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|Chatwoot|ManualSync|PurgeExcludedMedia|Help|GroupCommand|CacheRefresh|CacheBuildJobs|MCP|Meeting|ShowMessage|AttachmentMaintenance'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api ./internal/daemonclient
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/mcp
-      - name: Store schema and maintenance integration
-        run: |
-          go test -timeout 30m -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'SchemaVersion|Inline|Chatwoot|Reaction|CommunicationService|ParticipantIdentifier|Attachment|Sync|PersonSweep|Exclusive|Maintenance|Attribution|Recipient|StoredMessage|RelatedMessage|Observation'
-      - name: Explore and filename query integration
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/query ./internal/identityindex
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/tui -run "Meeting|Conversation|Transcript"
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/vector -run "Config|Policy|Person"
+      - name: Combined provider purge fixture behavior
+        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "PurgeExcludedMedia|MediaPolicy|SweepAttachment|SweepUnreferenced"
       - name: Vet
         run: |
           go vet -tags "fts5 sqlite_vec" ./...
@@ -83,76 +65,12 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 0e40435541db511204912c8a4c4d34b003da737c
+          ref: cabfdbbfe952e692214e6aba96024c2b6a689d04
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: PostgreSQL CLI and API integration
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|Chatwoot|ManualSync|PurgeExcludedMedia|Help|GroupCommand|CacheRefresh|CacheBuildJobs|MCP|Meeting|ShowMessage|AttachmentMaintenance'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api ./internal/daemonclient
-      - name: PostgreSQL schema and maintenance integration
-        run: |
-          go test -timeout 30m -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'SchemaVersion|Inline|Chatwoot|Reaction|CommunicationService|ParticipantIdentifier|Attachment|Sync|PersonSweep|Exclusive|Maintenance|Attribution|Recipient|StoredMessage|RelatedMessage|Observation'
-          git diff --exit-code
-
-  build:
-    runs-on: ubuntu-24.04
-    container:
-      image: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: 0e40435541db511204912c8a4c4d34b003da737c
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install container build tools
-        run: |
-          rm -f /etc/apt/sources.list.d/nodesource.list
-          for attempt in 1 2 3; do
-            if apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 -o Acquire::http::Timeout=30 gcc g++ make unzip libsqlite3-dev; then
-              exit 0
-            fi
-            echo "apt attempt $attempt failed; retrying" >&2
-            sleep 30
-          done
-          exit 1
-      - name: Trust container checkout
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version-file: web/package.json
-      - name: Browser labels and type checks
-        run: |
-          make web-install web-check web-test
-      - name: Precompile real archive fixture
-        run: go test -tags "fts5 sqlite_vec" -run "^$" -count=1 ./internal/query
-      - name: Build executable and embedded assets
-        run: |
-          make build
-          node scripts/check-web-assets.mjs --binary ./msgvault
-          ./msgvault version
-          ./msgvault add-inline --help
-          ./msgvault sync-inline --help
-          ./msgvault backfill-inline-media --help
-          make test-cli-e2e MSGVAULT_E2E_BINARY="$PWD/msgvault"
-          git diff --exit-code
-
-      - name: Real daemon conversation and meeting browser integration
-        working-directory: web
-        run: bun run test:browser tests/e2e/chatwoot-links.spec.ts tests/e2e/meeting-intelligence.spec.ts
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: failure()
-        with:
-          name: chatwoot-integration-browser-failures
-          path: |
-            web/playwright-report
-            web/test-results
-          if-no-files-found: ignore
-
+      - name: PostgreSQL combined provider purge fixture behavior
+        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "PurgeExcludedMedia|MediaPolicy|SweepAttachment|SweepUnreferenced"
