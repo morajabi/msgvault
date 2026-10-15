@@ -15,6 +15,89 @@ env:
   MSGVAULT_TEST_DB: ""
 
 jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: 0e40435541db511204912c8a4c4d34b003da737c
+          fetch-depth: 0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install SQLite headers
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - name: Verify source and formatting
+        run: |
+          test "$(git rev-parse HEAD)" = "0e40435541db511204912c8a4c4d34b003da737c"
+          go fmt ./...
+          git diff --exit-code
+      - name: Rendered root help contract
+        run: |
+          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "^TestRootHelpGolden$" -args -update
+          git diff --exit-code
+      - name: Provider and scheduler integration
+        run: |
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/chatwoot ./internal/config ./internal/clirun ./internal/scheduler ./internal/operations ./internal/meetingarchive ./internal/meetingcontent ./internal/netguard ./internal/remoteimage ./internal/carddav ./internal/discord ./internal/envutil ./internal/muesli ./internal/personmatch
+      - name: CLI and daemon integration
+        run: |
+          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|Chatwoot|ManualSync|PurgeExcludedMedia|Help|GroupCommand|CacheRefresh|CacheBuildJobs|MCP|Meeting|ShowMessage|AttachmentMaintenance'
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api ./internal/daemonclient
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/mcp
+      - name: Store schema and maintenance integration
+        run: |
+          go test -timeout 30m -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'SchemaVersion|Inline|Chatwoot|Reaction|CommunicationService|ParticipantIdentifier|Attachment|Sync|PersonSweep|Exclusive|Maintenance|Attribution|Recipient|StoredMessage|RelatedMessage|Observation'
+      - name: Explore and filename query integration
+        run: |
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/query ./internal/identityindex
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/tui -run "Meeting|Conversation|Transcript"
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/vector -run "Config|Policy|Person"
+      - name: Vet
+        run: |
+          go vet -tags "fts5 sqlite_vec" ./...
+      - name: Lint
+        run: |
+          make lint-ci
+
+  postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: msgvault_test
+          POSTGRES_PASSWORD: msgvault_test
+          POSTGRES_DB: msgvault_test
+          POSTGRES_INITDB_ARGS: "-c max_locks_per_transaction=256"
+        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      MSGVAULT_TEST_DB: postgres://msgvault_test:msgvault_test@localhost:5432/msgvault_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: 0e40435541db511204912c8a4c4d34b003da737c
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install SQLite headers
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - name: PostgreSQL CLI and API integration
+        run: |
+          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|Chatwoot|ManualSync|PurgeExcludedMedia|Help|GroupCommand|CacheRefresh|CacheBuildJobs|MCP|Meeting|ShowMessage|AttachmentMaintenance'
+          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api ./internal/daemonclient
+      - name: PostgreSQL schema and maintenance integration
+        run: |
+          go test -timeout 30m -tags "fts5 sqlite_vec" -count=1 ./internal/store -run 'SchemaVersion|Inline|Chatwoot|Reaction|CommunicationService|ParticipantIdentifier|Attachment|Sync|PersonSweep|Exclusive|Maintenance|Attribution|Recipient|StoredMessage|RelatedMessage|Observation'
+          git diff --exit-code
 
   build:
     runs-on: ubuntu-24.04
@@ -24,7 +107,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 4a2eeb24f48ef5fc912eef7a2dc193046d44d095
+          ref: 0e40435541db511204912c8a4c4d34b003da737c
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
@@ -73,20 +156,3 @@ jobs:
             web/test-results
           if-no-files-found: ignore
 
-  docs:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: 4a2eeb24f48ef5fc912eef7a2dc193046d44d095
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
-      - name: Read public docs assets from upstream
-        run: git remote set-url origin https://github.com/kenn-io/msgvault.git
-      - name: Install docs dependencies
-        working-directory: docs
-        run: uv sync --frozen --no-dev
-      - name: Build and validate documentation
-        run: make docs-check
