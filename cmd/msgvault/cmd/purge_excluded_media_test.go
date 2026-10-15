@@ -42,13 +42,14 @@ func newPurgeMediaFixture(t *testing.T, provider string) purgeMediaFixture {
 	_ = testCtx
 	newMessage := func(sourceMessageID, conversationType string, participants int) int64 {
 		identifier, messageType := "signal", provider
-		if provider == chatwoot.SourceType {
+		switch provider {
+		case chatwoot.SourceType:
 			accountID := int64(9)
 			if sourceMessageID == "retained" {
 				accountID, messageType = 10, "meeting_transcript"
 			}
 			identifier = chatwoot.SourceIdentifier("https://chatwoot.example.com", accountID, 8)
-		} else if provider == sourceTypeInline {
+		case sourceTypeInline:
 			identifier = "api.inline.chat:user:42"
 		}
 		source, err := st.GetOrCreateSource(provider, identifier)
@@ -71,9 +72,10 @@ func newPurgeMediaFixture(t *testing.T, provider string) purgeMediaFixture {
 	hash := strings.Repeat("ab", 32)
 	path := hash[:2] + "/" + hash
 	replaceAttachments := st.ReplaceMessageBeeperAttachments
-	if provider == chatwoot.SourceType {
+	switch provider {
+	case chatwoot.SourceType:
 		replaceAttachments = st.ReplaceMessageChatwootAttachments
-	} else if provider == sourceTypeInline {
+	case sourceTypeInline:
 		replaceAttachments = st.ReplaceMessageInlineProviderAttachments
 	}
 	for messageID, sourceAttachmentID := range map[int64]string{
