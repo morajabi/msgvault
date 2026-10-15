@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 5c2113abb05c9f4ddd201a176e9f7ff9fce2c66f
+          ref: b427593d4379ca4e6e2faf24bb70c806fd12f8f2
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -31,7 +31,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "5c2113abb05c9f4ddd201a176e9f7ff9fce2c66f"
+          test "$(git rev-parse HEAD)" = "b427593d4379ca4e6e2faf24bb70c806fd12f8f2"
           go fmt ./...
           git diff --exit-code
       - name: Cache regression after fixture style cleanup
@@ -63,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: 5c2113abb05c9f4ddd201a176e9f7ff9fce2c66f
+          ref: b427593d4379ca4e6e2faf24bb70c806fd12f8f2
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
