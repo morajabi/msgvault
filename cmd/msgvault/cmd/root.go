@@ -31,10 +31,10 @@ func newRootCommand() *cobra.Command {
 		Long: `Archive email, chats, and meetings offline. Use the daemon
 or config.toml's [remote].url; --local forces local.
 
-Start:
+Start here:
   msgvault list-accounts --json    # id, email, type, counts, sync
   msgvault search 'from:alice@example.com newer_than:30d' --json
-  # Use an "id" below
+  # Use an "id"
   msgvault show-message <id> --json  # body_text, attachments
   msgvault export-eml <id> -o msg.eml
   msgvault export-messages --start 2026-09-01T00:00:00Z --end 2026-10-01T00:00:00Z
