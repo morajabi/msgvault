@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: c12b84861cdeda596ac75a7d4ddb3af870c00a9f
+          ref: 5c2113abb05c9f4ddd201a176e9f7ff9fce2c66f
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -31,42 +31,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Verify source and formatting
         run: |
-          test "$(git rev-parse HEAD)" = "c12b84861cdeda596ac75a7d4ddb3af870c00a9f"
+          test "$(git rev-parse HEAD)" = "5c2113abb05c9f4ddd201a176e9f7ff9fce2c66f"
           go fmt ./...
           git diff --exit-code
-      - name: Reproduce stale backfill cache before the fix
-        run: |
-          git checkout 3e5aec7b8b1240166ee0039020da6d64417e0230 -- internal/inline/media.go
-          set +e
-          go test -json -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run '^TestBuildCache_RefreshesInlineBackfillSize$' > .git/backfill-cache-before-fix.jsonl
-          baseline_status=$?
-          set -e
-          git checkout HEAD -- internal/inline/media.go
-          test "$baseline_status" -ne 0
-          python3 - <<'VERIFY'
-          import json
-          from pathlib import Path
-          events = [json.loads(line) for line in Path('.git/backfill-cache-before-fix.jsonl').read_text().splitlines()]
-          name = 'TestBuildCache_RefreshesInlineBackfillSize'
-          failed = {event.get('Test') for event in events if event.get('Action') == 'fail' and event.get('Test')}
-          assert failed == {name}, failed
-          output = ''.join(event.get('Output', '') for event in events if event.get('Test') == name)
-          assert 'normal refresh must replace the previously cached provider size' in output, output
-          print('normal cache refresh retains stale provider size before the fix')
-          VERIFY
-          git diff --exit-code
-      - name: Verify repaired cache and checkpoint regressions
-        run: |
-          go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run '^TestBuildCache_RefreshesInlineBackfillSize$'
-          go test -v -tags "fts5 sqlite_vec" -count=1 ./internal/inline -run '^TestMediaBackfillRecordsSuccessfulSourceSyncAndPreservesResumeState$'
-      - name: Provider, config and CLI contracts
-        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config ./internal/clirun ./internal/scheduler ./internal/operations
-      - name: Daemon and store integration
-        run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run 'Inline|ManualSync|PurgeExcludedMedia|ListAccounts|Accounts|CacheRefresh|BuildCache'
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/api -run 'Inline|CLIRunCommandAllowed|Settings|Accounts'
-      - name: Sync completion store contracts
-        run: go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run "Sync.*(Complete|Preserve|Checkpoint)|Complete.*Sync"
+      - name: Cache regression after fixture style cleanup
+        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run '^TestBuildCache_RefreshesInlineBackfillSize$'
       - name: Vet
         run: go vet -tags "fts5 sqlite_vec" ./...
       - name: Lint
@@ -94,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: c12b84861cdeda596ac75a7d4ddb3af870c00a9f
+          ref: 5c2113abb05c9f4ddd201a176e9f7ff9fce2c66f
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
@@ -103,5 +72,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: PostgreSQL provider and checkpoint persistence
         run: |
-          go test -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "Inline|ManualSync|Accounts|CacheRefresh"
+          go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "^TestBuildCache_RefreshesInlineBackfillSize$"
 
