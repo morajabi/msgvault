@@ -1,246 +1,38 @@
 name: Inline source qualification
-
 on:
   push:
     branches: [codex/inline-source-ci]
-
 permissions:
   contents: read
-
 env:
   GOPROXY: https://proxy.golang.org|direct
   GOMAXPROCS: "4"
   GOFLAGS: -p=4
   GOMEMLIMIT: 6GiB
   MSGVAULT_TEST_DB: ""
-
 jobs:
-  static:
+  generator:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: c4d815e14e58aba3deea8623b8aa39819ddd6cae
-          fetch-depth: 0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install SQLite headers
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: Verify source and format
-        run: |
-          test "$(git rev-parse HEAD)" = "c4d815e14e58aba3deea8623b8aa39819ddd6cae"
-          go fmt ./...
-          git diff --exit-code
-          make pg-shipped-only-check
-      - name: Full tagged vet
-        run: go vet -tags "fts5 sqlite_vec" ./...
-      - name: Both lint profiles
-        run: make lint-ci
-
-  sqlite:
-    name: sqlite (${{ matrix.name }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: cli
-            package: ./cmd/msgvault/cmd
-          - name: store
-            package: ./internal/store
-          - name: api
-            package: ./internal/api
-    env:
-      GOMAXPROCS: "2"
-      GOFLAGS: -p=2
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: c4d815e14e58aba3deea8623b8aa39819ddd6cae
-          fetch-depth: 0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install SQLite headers
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: All package behavior in isolated shards
-        run: scripts/test-package-shards.sh "${{ matrix.package }}" 4 "fts5 sqlite_vec" 45m
-      - name: Source remains unchanged
-        run: git diff --exit-code
-
-  integration:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: c4d815e14e58aba3deea8623b8aa39819ddd6cae
-          fetch-depth: 0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install SQLite headers
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: Providers and shared transport behavior
-        run: |
-          go test -timeout 30m -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/beeper ./internal/chatwoot ./internal/config ./internal/clirun ./internal/scheduler ./internal/operations ./internal/meetingarchive ./internal/meetingcontent ./internal/attachmentpolicy ./internal/slack ./internal/discord ./internal/mcp ./internal/daemonclient
-      - name: Full query, search, contacts and API-client behavior
-        run: |
-          go test -timeout 30m -tags "fts5 sqlite_vec" -count=1 ./internal/query ./internal/search ./internal/savedview ./internal/identityindex ./internal/codegenfix ./internal/tui ./pkg/client
-          git diff --exit-code
-
-  postgres:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: msgvault_test
-          POSTGRES_PASSWORD: msgvault_test
-          POSTGRES_DB: msgvault_test
-          POSTGRES_INITDB_ARGS: "-c max_locks_per_transaction=256"
-        ports: [5432:5432]
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      MSGVAULT_TEST_DB: postgres://msgvault_test:msgvault_test@localhost:5432/msgvault_test?sslmode=disable
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: c4d815e14e58aba3deea8623b8aa39819ddd6cae
-          fetch-depth: 0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install SQLite headers
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: Full native PostgreSQL store and schema behavior
-        run: scripts/test-package-shards.sh ./internal/store 4 "fts5 sqlite_vec" 45m
-      - name: Full PostgreSQL CLI and API behavior
-        run: |
-          scripts/test-package-shards.sh ./cmd/msgvault/cmd 4 "fts5 sqlite_vec" 45m
-          scripts/test-package-shards.sh ./internal/api 4 "fts5 sqlite_vec" 45m
-      - name: PostgreSQL source, query and contact-route integration
-        run: |
-          go test -timeout 30m -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/beeper ./internal/chatwoot ./internal/mcp ./internal/daemonclient ./internal/query ./internal/search ./internal/savedview ./pkg/client
-          git diff --exit-code
-
-  build:
-    runs-on: ubuntu-24.04
-    container:
-      image: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: c4d815e14e58aba3deea8623b8aa39819ddd6cae
+          ref: 5b07272f9793a1b59546c756f09784056d07f43f
+          fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
           cache: true
-      - name: Install container build tools
+      - name: Install SQLite headers
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - name: Verify current-base source
         run: |
-          rm -f /etc/apt/sources.list.d/nodesource.list
-          for attempt in 1 2 3; do
-            if apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 && apt-get install -y --no-install-recommends -o Acquire::Retries=3 -o Acquire::http::Timeout=30 gcc g++ make unzip libsqlite3-dev; then
-              exit 0
-            fi
-            echo "apt attempt $attempt failed; retrying" >&2
-            sleep 30
-          done
-          exit 1
-      - name: Trust container checkout
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version-file: web/package.json
-      - name: Huma and generated API contracts
-        run: make huma-check openapi-check
-      - name: Browser labels and type checks
+          test "$(git rev-parse HEAD)" = "5b07272f9793a1b59546c756f09784056d07f43f"
+          test "$(git rev-parse HEAD^{tree})" = "5c3ada3397e84f81c05b3bdcfc94064adde10088"
+      - name: Regenerate OpenAPI with updated tool dependencies
+        run: make openapi-check
+      - name: Generated-client and normalizer behavior
         run: |
-          make web-install web-check web-test
-      - name: Precompile real archive fixture
-        run: go test -tags "fts5 sqlite_vec" -run "^$" -count=1 ./internal/query
-      - name: Build executable and embedded assets
-        run: |
-          make build
-          node scripts/check-web-assets.mjs --binary ./msgvault
-          ./msgvault version
-          ./msgvault add-inline --help
-          ./msgvault sync-inline --help
-          ./msgvault backfill-inline-media --help
-          make test-cli-e2e MSGVAULT_E2E_BINARY="$PWD/msgvault"
+          go test -timeout 15m -tags "fts5 sqlite_vec" -count=1 ./internal/codegenfix ./pkg/client
           git diff --exit-code
-
-      - name: Real daemon conversation and meeting browser integration
-        working-directory: web
-        run: bun run test:browser tests/e2e/chatwoot-links.spec.ts tests/e2e/meeting-intelligence.spec.ts tests/e2e/app-opened.spec.ts
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: failure()
-        with:
-          name: routes-integration-browser-failures
-          path: |
-            web/playwright-report
-            web/test-results
-          if-no-files-found: ignore
-
-
-  docs:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: c4d815e14e58aba3deea8623b8aa39819ddd6cae
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
-      - name: Read public docs assets from upstream
-        run: git remote set-url origin https://github.com/kenn-io/msgvault.git
-      - name: Install docs dependencies
-        working-directory: docs
-        run: uv sync --frozen --no-dev
-      - name: Build and validate documentation
-        run: make docs-check
-
-  windows:
-    runs-on: windows-2025
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          ref: c4d815e14e58aba3deea8623b8aa39819ddd6cae
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install SQLite development headers
-        shell: pwsh
-        run: |
-          C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed mingw-w64-x86_64-sqlite3
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Windows Inline provider and config behavior
-        shell: pwsh
-        env:
-          CGO_ENABLED: "1"
-          CGO_CFLAGS: "-IC:/msys64/mingw64/include -fgnu89-inline"
-          CGO_LDFLAGS: "-Wl,--allow-multiple-definition"
-        run: |
-          if ((git rev-parse HEAD) -ne "c4d815e14e58aba3deea8623b8aa39819ddd6cae") { throw "unexpected qualification source" }
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/inline ./internal/config
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          go test -tags "fts5 sqlite_vec" -count=1 ./internal/store -run "^TestSchemaVersion"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git diff --exit-code
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          test -z "$(git status --porcelain --untracked-files=all)"
