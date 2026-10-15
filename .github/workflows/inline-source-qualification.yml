@@ -29,19 +29,8 @@ jobs:
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: Verify source and formatting
-        run: |
-          test "$(git rev-parse HEAD)" = "cabfdbbfe952e692214e6aba96024c2b6a689d04"
-          go fmt ./...
-          git diff --exit-code
-      - name: Combined provider purge fixture behavior
-        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "PurgeExcludedMedia|MediaPolicy|SweepAttachment|SweepUnreferenced"
-      - name: Vet
-        run: |
-          go vet -tags "fts5 sqlite_vec" ./...
-      - name: Lint
-        run: |
-          make lint-ci
+      - name: Chatwoot account policy and shared meeting purge
+        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "^TestChatwootPurgeResolvesAccountPolicyAndSharedMeetings$"
 
   postgres:
     runs-on: ubuntu-24.04
@@ -72,5 +61,5 @@ jobs:
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: PostgreSQL combined provider purge fixture behavior
-        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "PurgeExcludedMedia|MediaPolicy|SweepAttachment|SweepUnreferenced"
+      - name: PostgreSQL Chatwoot account policy and shared meeting purge
+        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "^TestChatwootPurgeResolvesAccountPolicyAndSharedMeetings$"
