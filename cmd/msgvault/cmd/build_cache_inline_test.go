@@ -43,11 +43,12 @@ func TestBuildCache_RefreshesInlineBackfillSize(t *testing.T) {
 	media := inline.Media{ID: "document:1", ChatID: 7, MessageID: 1, Role: "document", Size: 3, URL: "https://api.inline.chat/file"}
 	const body = "deferred document"
 	client := &inlineCacheBackfillClient{
-		inlineProbeClient: {account: account, page: inline.Page{Messages: []inline.Message{{
+		account: account,
+		page: inline.Page{Messages: []inline.Message{{
 			ID: 1, ChatID: 7, SenderID: 43, Text: body,
 			SentAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), Media: []inline.Media{media},
 			Raw: jsontext.Value(`{"id":1,"chat_id":7,"text":"deferred document"}`), RawFormat: inline.RawMCPFormat,
-		}}}},
+		}}},
 		media: media,
 	}
 	imp := inline.NewImporter(st, client)
