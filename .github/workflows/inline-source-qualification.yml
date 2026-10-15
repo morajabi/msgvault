@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: cabfdbbfe952e692214e6aba96024c2b6a689d04
+          ref: 806706252cfd551a7b5744515cf207e328a83da8
           fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
@@ -29,12 +29,33 @@ jobs:
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: Chatwoot account policy and shared meeting purge
-        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "^TestChatwootPurgeResolvesAccountPolicyAndSharedMeetings$"
+      - name: Measure combined schema contract
+        run: |
+          test "$(git rev-parse HEAD)" = "806706252cfd551a7b5744515cf207e328a83da8"
+          set +e
+          go test -json -tags "fts5 sqlite_vec" -count=1 ./internal/store -run '^TestSchemaVersionContract$' > .git/schema-contract-receipt.jsonl
+          probe_status=$?
+          set -e
+          test "$probe_status" -eq 1
+          python3 - <<'RECEIPT'
+          import json, os, re
+          from pathlib import Path
+          events = [json.loads(line) for line in Path('.git/schema-contract-receipt.jsonl').read_text().splitlines()]
+          failed = {event.get('Test') for event in events if event.get('Action') == 'fail' and event.get('Test')}
+          assert failed == {'TestSchemaVersionContract'}, failed
+          output = ''.join(event.get('Output', '') for event in events)
+          receipts = dict((name, digest) for digest, name in re.findall(r'append "([0-9a-f]{64})" to (schemaContract(?:Postgres)?Digests)', output))
+          expected = {'schemaContractDigests'}
+          if os.environ.get('MSGVAULT_TEST_DB'):
+              expected.add('schemaContractPostgresDigests')
+          assert set(receipts) == expected, output
+          for name, digest in sorted(receipts.items()):
+              print('SCHEMA_RECEIPT_' + name + '=' + digest)
+          RECEIPT
 
   postgres:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -54,12 +75,33 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          ref: cabfdbbfe952e692214e6aba96024c2b6a689d04
+          ref: 806706252cfd551a7b5744515cf207e328a83da8
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version-file: go.mod
           cache: true
       - name: Install SQLite headers
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
-      - name: PostgreSQL Chatwoot account policy and shared meeting purge
-        run: go test -v -tags "fts5 sqlite_vec" -count=1 ./cmd/msgvault/cmd -run "^TestChatwootPurgeResolvesAccountPolicyAndSharedMeetings$"
+      - name: Measure combined schema contract
+        run: |
+          test "$(git rev-parse HEAD)" = "806706252cfd551a7b5744515cf207e328a83da8"
+          set +e
+          go test -json -tags "fts5 sqlite_vec" -count=1 ./internal/store -run '^TestSchemaVersionContract$' > .git/schema-contract-receipt.jsonl
+          probe_status=$?
+          set -e
+          test "$probe_status" -eq 1
+          python3 - <<'RECEIPT'
+          import json, os, re
+          from pathlib import Path
+          events = [json.loads(line) for line in Path('.git/schema-contract-receipt.jsonl').read_text().splitlines()]
+          failed = {event.get('Test') for event in events if event.get('Action') == 'fail' and event.get('Test')}
+          assert failed == {'TestSchemaVersionContract'}, failed
+          output = ''.join(event.get('Output', '') for event in events)
+          receipts = dict((name, digest) for digest, name in re.findall(r'append "([0-9a-f]{64})" to (schemaContract(?:Postgres)?Digests)', output))
+          expected = {'schemaContractDigests'}
+          if os.environ.get('MSGVAULT_TEST_DB'):
+              expected.add('schemaContractPostgresDigests')
+          assert set(receipts) == expected, output
+          for name, digest in sorted(receipts.items()):
+              print('SCHEMA_RECEIPT_' + name + '=' + digest)
+          RECEIPT
