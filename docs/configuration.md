@@ -1356,6 +1356,44 @@ max_media_mb = 250
 identifier = "api.inline.chat:user:42" # verified by add-inline
 transport = "mcp"                # mcp (default) or cli
 chat_ids = []                     # empty or omitted = all accessible chats
+# chat_ids = ["123", "456"]     # optional exact filter; no implied children
+# endpoint = "https://mcp.inline.chat/mcp/v2"
+# cli_path = "inline"            # CLI transport only; daemon-host executable
+
+[inline.accounts_config."api.inline.chat:user:42"]
+media = true
+max_media_mb = 500
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `enabled` | `false` | Whether the daemon schedules Inline sync |
+| `schedule` | — | Cron expression used by `msgvault serve`; no schedule means manual sync only |
+| `media` | `true` | Download attachment bytes; deferred media retains metadata |
+| `media_scope` | `all` | `all`, `direct`, or `none`; see [Media policy](#media-policy) |
+| `media_max_participants` | `20` | Skip media above this participant count or when the effective group count is unknown; explicit `0` removes the cap |
+| `max_media_mb` | `250` | Per-attachment download cap in MiB |
+| `accounts_config` | — | Per-canonical-account-identifier `media` and `max_media_mb` overrides |
+
+Each `[[inline.accounts]]` entry has:
+
+| Key | Default | Description |
+|---|---|---|
+| `identifier` | required | Canonical authenticated account identifier written by `add-inline` |
+| `transport` | `mcp` | OAuth MCP or the explicitly selected `cli` transport; there is no automatic fallback |
+| `chat_ids` | all accessible chats | Optional numeric chat IDs as strings for an exact filter; empty or omitted discovers all chats, while filtered child chats must be selected separately |
+| `endpoint` | `https://mcp.inline.chat/mcp/v2` | Only this production URL is accepted; omit the key to use the default |
+| `cli_path` | `inline` | CLI executable path on the daemon host, used only for `transport = "cli"` |
+
+An explicit filter pauses future capture outside that filter without removing
+archived records. Re-running `add-inline` with IDs merges existing explicit
+filters; running it without IDs restores all-chat mode. Changing transports
+retains the canonical account, conversation, and message identities. All-chat
+mode requires a complete catalog from the deployed Inline backend
+and MCP server or CLI. Deploy the backend first: an older backend can ignore
+the subthread request and silently omit child chats. Unsupported CLI commands
+and malformed MCP catalogs fail explicitly. Read the [connection and capture limits](usage/inline.md)
+before choosing media caps or configuring a remote daemon.
 
 ### `[[chatwoot]]` {#chatwoot}
 
